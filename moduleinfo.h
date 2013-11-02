@@ -5,7 +5,7 @@
 #endif
 
 /* Name of package */
-#define PACKAGE "foo"
+#define PACKAGE "gdbrsp"
 
 
 #ifdef VERSION

@@ -69,6 +69,10 @@ static void dissect_cmd_vCont(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
 
 }
 
+static void dissect_cmd_vStopped(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint poffset, struct gdbrsp_conv_data *conv) {
+
+}
+
 static void dissect_cmd_qSupported(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint poffset, struct gdbrsp_conv_data *conv) {
 
 }
@@ -93,14 +97,98 @@ static void dissect_cmd_QNonStop(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 
 }
 
+static void dissect_cmd_qAttached(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint poffset, struct gdbrsp_conv_data *conv) {
+
+}
+
+static void dissect_cmd_qTStatus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint poffset, struct gdbrsp_conv_data *conv) {
+
+}
+
+static void dissect_cmd_qTfV(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint poffset, struct gdbrsp_conv_data *conv) {
+
+}
+
+static void dissect_cmd_qTfP(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint poffset, struct gdbrsp_conv_data *conv) {
+
+}
+
+static void dissect_cmd_qTsV(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint poffset, struct gdbrsp_conv_data *conv) {
+
+}
+
+static void dissect_cmd_question(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint poffset, struct gdbrsp_conv_data *conv) {
+
+}
+
+static void dissect_cmd_qC(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint poffset, struct gdbrsp_conv_data *conv) {
+
+}
+
+static void dissect_cmd_qOffsets(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint poffset, struct gdbrsp_conv_data *conv) {
+
+}
+
+static void dissect_cmd_QPassSignal(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint poffset, struct gdbrsp_conv_data *conv) {
+
+}
+
+static void dissect_cmd_qSymbol(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint poffset, struct gdbrsp_conv_data *conv) {
+
+}
+
+static void dissect_cmd_m(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint poffset, struct gdbrsp_conv_data *conv) {
+
+}
+
+static void dissect_cmd_Z(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint poffset, struct gdbrsp_conv_data *conv) {
+
+}
+
+static void dissect_cmd_g(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint poffset, struct gdbrsp_conv_data *conv) {
+
+}
+
+static void dissect_cmd_G(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint poffset, struct gdbrsp_conv_data *conv) {
+
+}
+
+static void dissect_cmd_P(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint poffset, struct gdbrsp_conv_data *conv) {
+
+}
+
+static void dissect_cmd_X(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint poffset, struct gdbrsp_conv_data *conv) {
+
+}
+
+
 static struct dissect_command_t cmd_cbs[] = {
     { "vCont", dissect_cmd_vCont },
+    { "vStopped", dissect_cmd_vStopped },
     { "qSupported", dissect_cmd_qSupported },
     { "QStartNoAckMode", dissect_cmd_QStartNoAckMode },
     { "QProgramSignals", dissect_cmd_QProgramSignals },
     { "H", dissect_cmd_H },
     { "qXfer", dissect_cmd_qXfer },
     { "QNonStop", dissect_cmd_QNonStop },
+    { "qAttached", dissect_cmd_qAttached },
+    { "qTStatus", dissect_cmd_qTStatus },
+    { "qTfV", dissect_cmd_qTfV },
+    { "qTfP", dissect_cmd_qTfP },
+    { "qTsV", dissect_cmd_qTsV },
+    { "?", dissect_cmd_question },
+    { "qC", dissect_cmd_qC },
+    { "qOffsets", dissect_cmd_qOffsets },
+    { "QPassSignal", dissect_cmd_QPassSignal },
+    { "qSymbol", dissect_cmd_qSymbol },
+    { "m", dissect_cmd_m },
+    { "Z", dissect_cmd_Z },
+    { "g", dissect_cmd_g },
+    { "G", dissect_cmd_G },
+    { "P", dissect_cmd_P },
+    { "X", dissect_cmd_X },
+
+
     { NULL, NULL },
 };
 
@@ -182,6 +270,7 @@ static void dissect_one_stub_ack(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 
 static void dissect_one_notification(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
     struct gdbrsp_conv_data *conv) {
+  col_append_str(pinfo->cinfo, COL_INFO, "Notification");
   printf("Notification\n");
 }
 

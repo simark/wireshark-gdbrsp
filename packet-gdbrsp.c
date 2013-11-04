@@ -48,6 +48,10 @@ static gint ett_qsupported = -1;
 static int hf_gdbrsp_command = -1;
 static int hf_ack = -1;
 static int hf_qsupported = -1;
+static int hf_checksum = -1;
+
+// strlen("#XX");
+static const guint crc_len = 3;
 
 enum gdb_msg_type {
   GDB_HOST_QUERY,
@@ -378,6 +382,33 @@ static struct gdbrsp_conv_data *get_conv_data(packet_info *pinfo) {
   return conv_data;
 }
 
+static void dissect_crc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
+    struct gdbrsp_conv_data *conv) {
+  int i;
+  char packet_crc[3];
+  char computed_crc[3];
+  unsigned int crc = 0;
+
+  if (tree) {
+    for (i = offset; i < (offset + msg_len - crc_len); i++) {
+      crc += tvb_get_guint8(tvb, i);
+    }
+
+    crc = crc % 256;
+
+    // Skip #
+    i++;
+
+    packet_crc[0] = tvb_get_guint8(tvb, i);
+    packet_crc[1] = tvb_get_guint8(tvb, i + 1);
+    packet_crc[2] = '\0';
+
+    snprintf(computed_crc, 3, "%02x", crc);
+
+    proto_tree_add_uint_format_value(tree, hf_checksum, tvb, i, 2, crc, "%s (computed crc: %s)", packet_crc, computed_crc);
+  }
+}
+
 // If the available data contains a complete message, return the length of that message. Otherwise, return 0.
 static gint find_next_message_len(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset) {
   guint start_offset = offset;
@@ -456,7 +487,6 @@ static enum gdb_msg_type determine_type(struct gdbrsp_conv_data *conv, guint8 fi
 static void dissect_one_gdbrsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len) {
   proto_item *ti;
 
-
   if (check_col(pinfo->cinfo, COL_PROTOCOL)) {
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "GDB-RSP");
   }
@@ -485,24 +515,27 @@ static void dissect_one_gdbrsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
     p_add_proto_data(pinfo->fd, proto_gdbrsp, 0, packet_data);
   }
 
-  guint crc_len = strlen("#XX");
+
 
   // Dissect based on what we expect to have
   switch (packet_data->type) {
   case GDB_HOST_QUERY:
     dissect_one_host_query(tvb, pinfo, tree, offset, msg_len - crc_len, conv);
+    dissect_crc(tvb, pinfo, tree, offset + 1, msg_len - 1, conv);
     break;
   case GDB_HOST_ACK:
     dissect_one_host_ack(tvb, pinfo, tree, offset, msg_len, conv);
     break;
   case GDB_STUB_REPLY:
     dissect_one_stub_reply(tvb, pinfo, tree, offset, msg_len - crc_len, conv);
+    dissect_crc(tvb, pinfo, tree, offset + 1, msg_len - 1, conv);
     break;
   case GDB_STUB_ACK:
     dissect_one_stub_ack(tvb, pinfo, tree, offset, msg_len, conv);
     break;
   case GDB_NOTIFICATION:
     dissect_one_notification(tvb, pinfo, tree, offset, msg_len - crc_len, conv);
+    dissect_crc(tvb, pinfo, tree, offset + 1, msg_len - 1, conv);
     break;
   }
 }
@@ -532,64 +565,77 @@ static void dissect_gdbrsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree) 
   }
 }
 
-static hf_register_info hf_gdbrsp[] = {
-    {
-	&hf_gdbrsp_command,
+static hf_register_info hf_gdbrsp[] =
+{
 	{
-	    "Command", // name
-	    "gdbrsp.command", // abbrev
-	    FT_STRING, // type
-	    BASE_NONE, // display
-	    0, // strings
-	    0x0, // bitmask
-	    NULL, // blurb
-	    HFILL
-	}
-    },
-    {
-	&hf_ack,
+		&hf_gdbrsp_command,
+		{
+			"Command", // name
+			"gdbrsp.command", // abbrev
+			FT_STRING, // type
+			BASE_NONE, // display
+			0, // strings
+			0x0, // bitmask
+			NULL, // blurb
+			HFILL
+		}
+	},
 	{
-	    "Transmission succeeded", // name
-	    "gdbrsp.ack", // abbrev
-	    FT_BOOLEAN, // type
-	    BASE_NONE, // display
-	    &tfs_yes_no, // strings
-	    0x0, // bitmask
-	    NULL, // blurb
-	    HFILL
-	}
-    },
-    {
-	&hf_qsupported,
+		&hf_ack,
+		{
+			"Transmission succeeded", // name
+			"gdbrsp.ack", // abbrev
+			FT_BOOLEAN, // type
+			BASE_NONE, // display
+			&tfs_yes_no, // strings
+			0x0, // bitmask
+			NULL, // blurb
+			HFILL
+		}
+	},
 	{
-	    "Supported", // name
-	    "gdbrsp.supported", // abbrev
-	    FT_STRINGZ, // type
-	    BASE_NONE, // display
-	    0, // strings
-	    0x0, // bitmask
-	    "Supported (or not) feature", // blurb
-	    HFILL
-	}
-    },
+		&hf_qsupported,
+		{
+			"Supported", // name
+			"gdbrsp.supported", // abbrev
+			FT_STRINGZ, // type
+			BASE_NONE, // display
+			0, // strings
+			0x0, // bitmask
+			"Supported (or not) feature", // blurb
+			HFILL
+		}
+	},
+	{
+		&hf_checksum,
+		{
+			"Checksum", // name
+			"gdbrsp.checksum", // abbrev
+			FT_UINT8, // type
+			BASE_HEX, // display
+			0, // strings
+			0x0, // bitmask
+			NULL, // blurb
+			HFILL
+		}
+	},
 };
 
 void proto_register_gdbrsp(void) {
 
-  static gint *ett_gdbrsp_arr[] = {
-      &ett_gdbrsp, &ett_qsupported
-  };
+	static gint *ett_gdbrsp_arr[] =
+	{ &ett_gdbrsp, &ett_qsupported };
 
-  proto_gdbrsp = proto_register_protocol("GDB Remote Serial Protocol", "GDB RSP", "gdbrsp");
-  proto_register_field_array(proto_gdbrsp, hf_gdbrsp, array_length (hf_gdbrsp));
-  proto_register_subtree_array(ett_gdbrsp_arr, array_length (ett_gdbrsp_arr));
+	proto_gdbrsp = proto_register_protocol("GDB Remote Serial Protocol", "GDB RSP", "gdbrsp");
+	proto_register_field_array(proto_gdbrsp, hf_gdbrsp, array_length (hf_gdbrsp));
+	proto_register_subtree_array(ett_gdbrsp_arr, array_length (ett_gdbrsp_arr));
 }
 
 void proto_reg_handoff_gdbrsp_gdbrsp(void) {
-  static dissector_handle_t gdbrsp_handle;
+	static dissector_handle_t gdbrsp_handle;
 
-  gdbrsp_handle = create_dissector_handle(dissect_gdbrsp, proto_gdbrsp);
+	gdbrsp_handle = create_dissector_handle(dissect_gdbrsp, proto_gdbrsp);
 
-  dissector_add_uint("tcp.port", gdbrsp_PORT, gdbrsp_handle);
+	dissector_add_uint("tcp.port", gdbrsp_PORT, gdbrsp_handle);
 }
 

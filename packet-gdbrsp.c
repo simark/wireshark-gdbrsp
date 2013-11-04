@@ -88,14 +88,13 @@ static void dissect_cmd_vStopped(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 static void dissect_reply_vStopped(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len, struct gdbrsp_conv_data *conv) {
 }
 
-static void dissect_cmd_qSupported(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len, struct gdbrsp_conv_data *conv) {
+static void dissect_qSupported(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len, struct gdbrsp_conv_data *conv) {
   proto_item *ti;
 
   if (tree) {
     ti = proto_tree_add_text(tree, tvb, offset + 1, msg_len - 1, "Supported features");
     tree = proto_item_add_subtree(ti, ett_qsupported);
   }
-
 
   guint8 c;
 
@@ -109,17 +108,23 @@ static void dissect_cmd_qSupported(tvbuff_t *tvb, packet_info *pinfo, proto_tree
       c = tvb_get_guint8(tvb, offset_end);
     }
 
-    gchar *feature = tvb_get_ephemeral_string(tvb, offset_start, offset_end - offset_start);
-    printf("feature: %s", feature);
+    gchar *feature = (gchar*)tvb_get_ephemeral_string(tvb, offset_start, offset_end - offset_start);
 
-    proto_tree_add_string(tree, hf_qsupported, tvb, offset_start, offset_end - offset_start, feature);
+    if (tree) {
+      proto_tree_add_string(tree, hf_qsupported, tvb, offset_start, offset_end - offset_start, feature);
+    }
 
     offset_end = offset_end + 1;
     offset_start = offset_end;
   }
 }
 
+static void dissect_cmd_qSupported(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len, struct gdbrsp_conv_data *conv) {
+  dissect_qSupported(tvb, pinfo, tree, offset, msg_len, conv);
+}
+
 static void dissect_reply_qSupported(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len, struct gdbrsp_conv_data *conv) {
+  dissect_qSupported(tvb, pinfo, tree, offset, msg_len, conv);
 }
 
 static void dissect_cmd_QStartNoAckMode(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len, struct gdbrsp_conv_data *conv) {

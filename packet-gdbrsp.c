@@ -53,6 +53,7 @@ static int hf_reply_to = -1;
 static int hf_request_in = -1;
 static int hf_reply_in = -1;
 static int hf_ack_to = -1;
+static int hf_reply_ok_error = -1;
 
 // strlen("#XX");
 static const guint crc_len = 3;
@@ -98,6 +99,24 @@ struct gdbrsp_conv_data {
 
 char* ack_types[] =
 { "Packet received correctly", "Retransmission requested", };
+
+static void dissect_ok_error_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
+    struct gdbrsp_conv_data *conv) {
+	if (msg_len == 0) {
+		proto_tree_add_string(tree, hf_reply_ok_error, tvb, offset, msg_len, "Target does not support this command");
+		return;
+	}
+
+	if (tvb_strneql(tvb, offset, "OK", 2) == 0) {
+		proto_tree_add_string(tree, hf_reply_ok_error, tvb, offset, msg_len, "OK");
+		return;
+	}
+
+	if (tvb_get_guint8(tvb, offset) == 'E') {
+		proto_tree_add_string(tree, hf_reply_ok_error, tvb, offset, msg_len, "Error");
+		return;
+	}
+}
 
 static void dissect_cmd_vCont(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
     struct gdbrsp_conv_data *conv) {
@@ -164,6 +183,8 @@ static void dissect_cmd_QStartNoAckMode(tvbuff_t *tvb, packet_info *pinfo, proto
 static void dissect_reply_QStartNoAckMode(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset,
     guint msg_len, struct gdbrsp_conv_data *conv) {
 	conv->disable_ack_at_next_host_ack = 1;
+
+	dissect_ok_error_reply(tvb, pinfo, tree, offset, msg_len, conv);
 }
 
 static void dissect_cmd_QProgramSignals(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset,
@@ -172,6 +193,7 @@ static void dissect_cmd_QProgramSignals(tvbuff_t *tvb, packet_info *pinfo, proto
 
 static void dissect_reply_QProgramSignals(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset,
     guint msg_len, struct gdbrsp_conv_data *conv) {
+	dissect_ok_error_reply(tvb, pinfo, tree, offset, msg_len, conv);
 }
 
 static void dissect_cmd_H(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
@@ -180,6 +202,7 @@ static void dissect_cmd_H(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, g
 
 static void dissect_reply_H(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
     struct gdbrsp_conv_data *conv) {
+	dissect_ok_error_reply(tvb, pinfo, tree, offset, msg_len, conv);
 }
 
 static void dissect_cmd_qXfer(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
@@ -196,6 +219,7 @@ static void dissect_cmd_QNonStop(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 
 static void dissect_reply_QNonStop(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
     struct gdbrsp_conv_data *conv) {
+	dissect_ok_error_reply(tvb, pinfo, tree, offset, msg_len, conv);
 }
 
 static void dissect_cmd_qAttached(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
@@ -238,10 +262,12 @@ static void dissect_reply_qTsV(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
     struct gdbrsp_conv_data *conv) {
 }
 
+// The ? command
 static void dissect_cmd_haltreason(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
     struct gdbrsp_conv_data *conv) {
 }
 
+// The ? command
 static void dissect_reply_haltreason(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
     struct gdbrsp_conv_data *conv) {
 }
@@ -308,6 +334,7 @@ static void dissect_cmd_G(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, g
 
 static void dissect_reply_G(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
     struct gdbrsp_conv_data *conv) {
+	dissect_ok_error_reply(tvb, pinfo, tree, offset, msg_len, conv);
 }
 
 static void dissect_cmd_P(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
@@ -316,6 +343,7 @@ static void dissect_cmd_P(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, g
 
 static void dissect_reply_P(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
     struct gdbrsp_conv_data *conv) {
+	dissect_ok_error_reply(tvb, pinfo, tree, offset, msg_len, conv);
 }
 
 static void dissect_cmd_X(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
@@ -324,6 +352,7 @@ static void dissect_cmd_X(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, g
 
 static void dissect_reply_X(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
     struct gdbrsp_conv_data *conv) {
+	dissect_ok_error_reply(tvb, pinfo, tree, offset, msg_len, conv);
 }
 
 
@@ -446,7 +475,8 @@ static void dissect_one_stub_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 	col_append_str(pinfo->cinfo, COL_INFO, " to ");
 	col_append_str(pinfo->cinfo, COL_INFO, cmd->command);
 
-	cmd->reply_handler(tvb, pinfo, tree, offset, msg_len, conv);
+	/* Skip $ */
+	cmd->reply_handler(tvb, pinfo, tree, offset + 1, msg_len - 1, conv);
 
 	if (tree) {
 		proto_tree_add_uint(tree, hf_request_in, tvb, 0, 0, packet_data->matching_framenum);
@@ -799,6 +829,19 @@ static hf_register_info hf_gdbrsp[] =
 			"gdbrsp.checksum", // abbrev
 			FT_UINT8, // type
 			BASE_HEX, // display
+			0, // strings
+			0x0, // bitmask
+			NULL, // blurb
+			HFILL
+		}
+	},
+	{
+		&hf_reply_ok_error,
+		{
+			"Reply", // name
+			"gdbrsp.reply", // abbrev
+			FT_STRINGZ, // type
+			BASE_NONE, // display
 			0, // strings
 			0x0, // bitmask
 			NULL, // blurb

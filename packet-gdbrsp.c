@@ -54,6 +54,7 @@ static int hf_request_in = -1;
 static int hf_reply_in = -1;
 static int hf_ack_to = -1;
 static int hf_reply_ok_error = -1;
+static int hf_disable_randomization = -1;
 
 // strlen("#XX");
 static const guint crc_len = 3;
@@ -123,6 +124,14 @@ static void dissect_cmd_vCont(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
 }
 
 static void dissect_reply_vCont(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
+    struct gdbrsp_conv_data *conv) {
+}
+
+static void dissect_cmd_vRun(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
+    struct gdbrsp_conv_data *conv) {
+}
+
+static void dissect_reply_vRun(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
     struct gdbrsp_conv_data *conv) {
 }
 
@@ -262,12 +271,11 @@ static void dissect_reply_qTsV(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
     struct gdbrsp_conv_data *conv) {
 }
 
-// The ? command
+/* The ? command */
 static void dissect_cmd_haltreason(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
     struct gdbrsp_conv_data *conv) {
 }
 
-// The ? command
 static void dissect_reply_haltreason(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
     struct gdbrsp_conv_data *conv) {
 }
@@ -355,9 +363,37 @@ static void dissect_reply_X(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 	dissect_ok_error_reply(tvb, pinfo, tree, offset, msg_len, conv);
 }
 
+/* The ! command */
+static void dissect_cmd_enable_extended(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
+    struct gdbrsp_conv_data *conv) {
+
+}
+
+static void dissect_reply_enable_extended(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
+    struct gdbrsp_conv_data *conv) {
+	dissect_ok_error_reply(tvb, pinfo, tree, offset, msg_len, conv);
+}
+
+static void dissect_cmd_QDisableRandomization(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
+    struct gdbrsp_conv_data *conv) {
+	    guint8 c = tvb_get_guint8(tvb, offset + 1);
+
+	    if (c == '1') {
+		    proto_tree_add_boolean(tree, hf_disable_randomization, tvb, offset + 1, 1, TRUE);
+	    } else if (c == '0') {
+		    proto_tree_add_boolean(tree, hf_disable_randomization, tvb, offset + 1, 1, FALSE);
+	    }
+}
+
+static void dissect_reply_QDisableRandomization(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
+    struct gdbrsp_conv_data *conv) {
+	dissect_ok_error_reply(tvb, pinfo, tree, offset, msg_len, conv);
+}
+
 
 static struct dissect_command_t cmd_cbs[] = {
 	{ "vCont", dissect_cmd_vCont, dissect_reply_vCont },
+	{ "vRun", dissect_cmd_vRun, dissect_reply_vRun },
 	{ "vStopped", dissect_cmd_vStopped, dissect_reply_vStopped },
 	{ "qSupported", dissect_cmd_qSupported, dissect_reply_qSupported },
 	{ "QStartNoAckMode", dissect_cmd_QStartNoAckMode, dissect_reply_QStartNoAckMode },
@@ -381,6 +417,8 @@ static struct dissect_command_t cmd_cbs[] = {
 	{ "G", dissect_cmd_G, dissect_reply_G },
 	{ "P", dissect_cmd_P, dissect_reply_P },
 	{ "X", dissect_cmd_X, dissect_reply_X },
+	{ "!", dissect_cmd_enable_extended, dissect_reply_enable_extended },
+	{ "QDisableRandomization", dissect_cmd_QDisableRandomization, dissect_reply_QDisableRandomization },
 };
 
 static struct dissect_command_t *find_command(tvbuff_t *tvb, guint offset) {
@@ -453,7 +491,6 @@ static void dissect_one_stub_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 
 	if (!pinfo->fd->flags.visited) {
 		packet_data->command = conv->last_command;
-		conv->last_packet_framenum = pinfo->fd->num;
 
 		/* Make the links between request and reply */
 		packet_data->matching_framenum = conv->last_packet_framenum;
@@ -843,6 +880,19 @@ static hf_register_info hf_gdbrsp[] =
 			FT_STRINGZ, // type
 			BASE_NONE, // display
 			0, // strings
+			0x0, // bitmask
+			NULL, // blurb
+			HFILL
+		}
+	},
+	{
+		&hf_disable_randomization,
+		{
+			"Disable randomization", // name
+			"gdbrsp.disable_randomization", // abbrev
+			FT_BOOLEAN, // type
+			BASE_NONE, // display
+			&tfs_yes_no, // strings
 			0x0, // bitmask
 			NULL, // blurb
 			HFILL

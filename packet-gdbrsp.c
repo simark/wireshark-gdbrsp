@@ -45,7 +45,7 @@ static gint ett_gdbrsp = -1;
 static gint ett_qsupported = -1;
 
 /* Variables for fields */
-static int hf_gdbrsp_command = -1;
+static int hf_command = -1;
 static int hf_ack = -1;
 static int hf_qsupported = -1;
 static int hf_checksum = -1;
@@ -351,7 +351,7 @@ static void dissect_one_host_query(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 			printf("> %s\n", cmd->command);
 
 			if (tree) {
-				proto_tree_add_string(tree, hf_gdbrsp_command, tvb, offset + 1, command_len, cmd->command);
+				proto_tree_add_string(tree, hf_command, tvb, offset + 1, command_len, cmd->command);
 			}
 
 			col_append_str(pinfo->cinfo, COL_INFO, cmd->command);
@@ -616,7 +616,7 @@ static void dissect_gdbrsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree) 
 static hf_register_info hf_gdbrsp[] =
 {
 	{
-		&hf_gdbrsp_command,
+		&hf_command,
 		{
 			"Command", // name
 			"gdbrsp.command", // abbrev

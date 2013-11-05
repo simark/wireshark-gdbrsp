@@ -443,9 +443,8 @@ static void dissect_one_stub_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 		proto_tree_add_string(tree, hf_reply_to, tvb, 0, 0, cmd->command);
 	}
 
-	col_append_str(pinfo->cinfo, COL_INFO, " (");
+	col_append_str(pinfo->cinfo, COL_INFO, " to ");
 	col_append_str(pinfo->cinfo, COL_INFO, cmd->command);
-	col_append_str(pinfo->cinfo, COL_INFO, ")");
 
 	cmd->reply_handler(tvb, pinfo, tree, offset, msg_len, conv);
 
@@ -457,7 +456,6 @@ static void dissect_one_stub_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 static void dissect_one_ack(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
     struct gdbrsp_conv_data *conv) {
 	printf("Stub ack %d\n", msg_len);
-
 
 	struct per_packet_data *packet_data = p_get_proto_data(pinfo->fd, proto_gdbrsp, 0);
 

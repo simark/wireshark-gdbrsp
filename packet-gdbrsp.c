@@ -52,6 +52,7 @@ static int hf_checksum = -1;
 static int hf_reply_to = -1;
 static int hf_request_in = -1;
 static int hf_reply_in = -1;
+static int hf_ack_to = -1;
 
 // strlen("#XX");
 static const guint crc_len = 3;
@@ -75,11 +76,10 @@ struct dissect_command_t {
 };
 
 struct per_packet_data {
-	gboolean visited;
 	enum gdb_msg_type type;
 	/* The command this request/reply is for */
 	struct dissect_command_t *command;
-	/* Reply framenum for request and vice-versa */
+	/* Reply framenum for request and vice-versa. */
 	gint matching_framenum;
 };
 
@@ -88,8 +88,8 @@ struct gdbrsp_conv_data {
 
 	/* Details about last command processed */
 	struct dissect_command_t *last_command;
-	guint last_command_framenum;
-	struct per_packet_data *last_command_data;
+	guint last_packet_framenum;
+	struct per_packet_data *last_request_data;
 
 	int ack_enabled;
 	/* When we see QStartNoAckMode, we know that the next host ack will be the last. */
@@ -376,18 +376,16 @@ static void dissect_one_host_query(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 
 	struct per_packet_data *packet_data = p_get_proto_data(pinfo->fd, proto_gdbrsp, 0);
 
-	if (packet_data->visited) {
-		cmd = packet_data->command;
-	} else {
+	if (!pinfo->fd->flags.visited) {
 		/* Skip $ */
-		cmd = find_command(tvb, offset + 1);
-		packet_data->visited = TRUE;
-		packet_data->command = cmd;
+		packet_data->command = find_command(tvb, offset + 1);
+
+		conv->last_command = packet_data->command;
+		conv->last_packet_framenum = pinfo->fd->num;
+		conv->last_request_data = packet_data;
 	}
 
-	conv->last_command = cmd;
-	conv->last_command_framenum = pinfo->fd->num;
-	conv->last_command_data = packet_data;
+	cmd = packet_data->command;
 
 	if (!cmd) {
 		printf("Unknown command\n");
@@ -416,26 +414,6 @@ static void dissect_one_host_query(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 		}
 	}
 }
-
-static void dissect_one_host_ack(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
-	printf("Host ack %d\n", msg_len);
-	guint8 c = tvb_get_guint8(tvb, offset);
-	col_append_str(pinfo->cinfo, COL_INFO, "Host acknowledgement");
-
-	if (conv->disable_ack_at_next_host_ack) {
-		conv->ack_enabled = 0;
-		conv->disable_ack_at_next_host_ack = 0;
-	}
-
-	if (msg_len == 1 && (c == '+' || c == '-')) {
-		if (tree) {
-			// Add protocol section in the packet details
-			proto_tree_add_boolean(tree, hf_ack, tvb, offset, 1, c == '+' ? TRUE : FALSE);
-		}
-	}
-}
-
 static void dissect_one_stub_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
     struct gdbrsp_conv_data *conv) {
 	struct dissect_command_t *cmd;
@@ -444,12 +422,14 @@ static void dissect_one_stub_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 
 	struct per_packet_data *packet_data = p_get_proto_data(pinfo->fd, proto_gdbrsp, 0);
 
-	if (!packet_data->visited) {
+	if (!pinfo->fd->flags.visited) {
 		packet_data->command = conv->last_command;
-		packet_data->matching_framenum = conv->last_command_framenum;
-		conv->last_command_data->matching_framenum = pinfo->fd->num;
+		conv->last_packet_framenum = pinfo->fd->num;
 
-		packet_data->visited = TRUE;
+		/* Make the links between request and reply */
+		packet_data->matching_framenum = conv->last_packet_framenum;
+		conv->last_request_data->matching_framenum = pinfo->fd->num;
+		conv->last_packet_framenum = pinfo->fd->num;
 	}
 
 	cmd = packet_data->command;
@@ -474,18 +454,50 @@ static void dissect_one_stub_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 	}
 }
 
-static void dissect_one_stub_ack(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
+static void dissect_one_ack(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
     struct gdbrsp_conv_data *conv) {
 	printf("Stub ack %d\n", msg_len);
-	guint8 c = tvb_get_guint8(tvb, offset);
-	col_append_str(pinfo->cinfo, COL_INFO, "Stub acknowledgement");
 
+
+	struct per_packet_data *packet_data = p_get_proto_data(pinfo->fd, proto_gdbrsp, 0);
+
+	if (!pinfo->fd->flags.visited) {
+		packet_data->command = conv->last_command;
+		packet_data->matching_framenum = conv->last_packet_framenum;
+	}
+
+	guint8 c = tvb_get_guint8(tvb, offset);
 	if (msg_len == 1 && (c == '+' || c == '-')) {
 		if (tree) {
 			// Add protocol section in the packet details
 			proto_tree_add_boolean(tree, hf_ack, tvb, offset, 1, c == '+' ? TRUE : FALSE);
+
+			if (packet_data->matching_framenum > 0) {
+				proto_tree_add_uint(tree, hf_ack_to, tvb, 0, 0, packet_data->matching_framenum);
+			}
 		}
 	}
+}
+
+static void dissect_one_host_ack(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
+    struct gdbrsp_conv_data *conv) {
+	printf("Host ack %d\n", msg_len);
+
+	if (!pinfo->fd->flags.visited) {
+		if (conv->disable_ack_at_next_host_ack) {
+			conv->ack_enabled = 0;
+			conv->disable_ack_at_next_host_ack = 0;
+		}
+	}
+
+	dissect_one_ack(tvb, pinfo, tree, offset, msg_len, conv);
+	col_append_str(pinfo->cinfo, COL_INFO, "Host acknowledgement");
+}
+
+static void dissect_one_stub_ack(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
+    struct gdbrsp_conv_data *conv) {
+	dissect_one_ack(tvb, pinfo, tree, offset, msg_len, conv);
+	col_append_str(pinfo->cinfo, COL_INFO, "Stub acknowledgement");
 }
 
 static void dissect_one_notification(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
@@ -631,7 +643,6 @@ static void dissect_one_gdbrsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 	struct per_packet_data *packet_data = p_get_proto_data(pinfo->fd, proto_gdbrsp, 0);
 	if (!packet_data) {
 		packet_data = g_malloc0(sizeof(struct per_packet_data));
-		packet_data->visited = FALSE;
 		// TODO: add check and exception
 		// TODO: When to free that memory?
 
@@ -709,7 +720,7 @@ static hf_register_info hf_gdbrsp[] =
 		&hf_reply_to,
 		{
 			"Reply to", // name
-			"gdbrsp.replyto", // abbrev
+			"gdbrsp.reply_to", // abbrev
 			FT_STRING, // type
 			BASE_NONE, // display
 			0, // strings
@@ -752,6 +763,19 @@ static hf_register_info hf_gdbrsp[] =
 			FT_BOOLEAN, // type
 			BASE_NONE, // display
 			&tfs_yes_no, // strings
+			0x0, // bitmask
+			NULL, // blurb
+			HFILL
+		}
+	},
+	{
+		&hf_ack_to,
+		{
+			"Acknowledgement to frame", // name
+			"gdbrsp.ack_to", // abbrev
+			FT_FRAMENUM, // type
+			BASE_NONE, // display
+			0, // strings
 			0x0, // bitmask
 			NULL, // blurb
 			HFILL

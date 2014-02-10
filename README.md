@@ -3,6 +3,8 @@ wireshark-gdbrsp
 
 My attempt at a Wireshark dissector for GDB's remote serial protocol.
 
+You will need the Wireshark development headers (`wireshark-dev` on Ubuntu).
+
     mkdir build
     cd build
     cmake ..

@@ -32,6 +32,7 @@
 #include <config.h>
 #include <epan/packet.h>
 #include <stdio.h>
+#include <ctype.h>
 #include <epan/dissectors/packet-tcp.h>
 #define gdbrsp_PORT 1234
 
@@ -50,6 +51,9 @@ static int hf_ack = -1;
 static int hf_qsupported = -1;
 static int hf_checksum = -1;
 static int hf_reply_to = -1;
+static int hf_address = -1;
+static int hf_length = -1;
+static int hf_bytes = -1;
 static int hf_request_in = -1;
 static int hf_reply_in = -1;
 static int hf_ack_to = -1;
@@ -83,6 +87,12 @@ struct per_packet_data {
 	struct dissect_command_t *command;
 	/* Reply framenum for request and vice-versa. */
 	gint matching_framenum;
+
+	union {
+		struct {
+			int requested_len;
+		} m;
+	} u;
 };
 
 struct gdbrsp_conv_data {
@@ -314,10 +324,66 @@ static void dissect_reply_qSymbol(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
 
 static void dissect_cmd_m(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
     struct gdbrsp_conv_data *conv) {
+		struct per_packet_data *pdata = p_get_proto_data(pinfo->fd, proto_gdbrsp, 0);
+		guint8 digit = 0;
+
+		guint start_offset = offset;
+
+		digit = tvb_get_guint8(tvb, offset);
+		while (digit != ',') {
+			if (!isxdigit(digit)) {
+				// Whaaaaat
+				return;
+			}
+
+			offset++;
+			digit = tvb_get_guint8(tvb, offset);
+		}
+
+		gchar *address = (gchar*) tvb_get_ephemeral_string(tvb, start_offset, offset - start_offset);
+		proto_tree_add_string_format_value(tree, hf_address, tvb, start_offset, offset - start_offset, address, "0x%s", address);
+
+		// Skip ,
+		offset++;
+
+		start_offset = offset;
+
+		digit = tvb_get_guint8(tvb, offset);
+		while (digit != '#') {
+			if (!isxdigit(digit)) {
+				// Whaaaaat
+				return;
+			}
+
+			offset++;
+			digit = tvb_get_guint8(tvb, offset);
+		}
+
+		gchar *len = (gchar*) tvb_get_ephemeral_string(tvb, start_offset, offset - start_offset);
+		long lenn = strtol(len, NULL, 16);
+		proto_tree_add_int(tree, hf_length, tvb, start_offset, offset - start_offset, lenn);
+
+		pdata->u.m.requested_len = lenn;
 }
 
 static void dissect_reply_m(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
     struct gdbrsp_conv_data *conv) {
+		int expected_len = conv->last_request_data->u.m.requested_len;
+		printf("dissect_reply_m pre-allocating %d bytes\n", expected_len);
+		GArray *bytes = g_array_sized_new(FALSE, FALSE, sizeof(guint8), expected_len);
+
+		guint8 b;
+		guint start_offset = offset;
+
+		b = tvb_get_guint8(tvb, offset);
+		while (isxdigit(b)) {
+			g_array_append_val(bytes, b);
+			offset++;
+			b = tvb_get_guint8(tvb, offset);
+		}
+
+		proto_tree_add_bytes(tree, hf_bytes, tvb, start_offset, offset - start_offset, (guint8*)bytes->data);
+		g_array_free(bytes, TRUE);
 }
 
 static void dissect_cmd_Z(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
@@ -787,6 +853,45 @@ static hf_register_info hf_gdbrsp[] =
 			"Reply to", // name
 			"gdbrsp.reply_to", // abbrev
 			FT_STRING, // type
+			BASE_NONE, // display
+			0, // strings
+			0x0, // bitmask
+			NULL, // blurb
+			HFILL
+		}
+	},
+	{
+		&hf_address,
+		{
+			"Address", // name
+			"gdbrsp.address", // abbrev
+			FT_STRING, // type
+			BASE_NONE, // display
+			0, // strings
+			0x0, // bitmask
+			NULL, // blurb
+			HFILL
+		}
+	},
+	{
+		&hf_length,
+		{
+			"Length", // name
+			"gdbrsp.length", // abbrev
+			FT_INT32, // type
+			BASE_DEC, // display
+			0, // strings
+			0x0, // bitmask
+			NULL, // blurb
+			HFILL
+		}
+	},
+	{
+		&hf_bytes,
+		{
+			"Bytes", // name
+			"gdbrsp.bytes", // abbrev
+			FT_BYTES, // type
 			BASE_NONE, // display
 			0, // strings
 			0x0, // bitmask

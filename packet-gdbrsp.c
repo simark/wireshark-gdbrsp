@@ -137,6 +137,14 @@ static void dissect_reply_vCont(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
     struct gdbrsp_conv_data *conv) {
 }
 
+static void dissect_cmd_vKill(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
+    struct gdbrsp_conv_data *conv) {
+}
+
+static void dissect_reply_vKill(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
+    struct gdbrsp_conv_data *conv) {
+}
+
 static void dissect_cmd_vRun(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
     struct gdbrsp_conv_data *conv) {
 }
@@ -456,9 +464,19 @@ static void dissect_reply_QDisableRandomization(tvbuff_t *tvb, packet_info *pinf
 	dissect_ok_error_reply(tvb, pinfo, tree, offset, msg_len, conv);
 }
 
+static void dissect_cmd_T(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
+    struct gdbrsp_conv_data *conv) {
+}
+
+static void dissect_reply_T(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
+    struct gdbrsp_conv_data *conv) {
+	dissect_ok_error_reply(tvb, pinfo, tree, offset, msg_len, conv);
+}
+
 
 static struct dissect_command_t cmd_cbs[] = {
 	{ "vCont", dissect_cmd_vCont, dissect_reply_vCont },
+	{ "vKill", dissect_cmd_vKill, dissect_reply_vKill },
 	{ "vRun", dissect_cmd_vRun, dissect_reply_vRun },
 	{ "vStopped", dissect_cmd_vStopped, dissect_reply_vStopped },
 	{ "qSupported", dissect_cmd_qSupported, dissect_reply_qSupported },
@@ -485,6 +503,7 @@ static struct dissect_command_t cmd_cbs[] = {
 	{ "X", dissect_cmd_X, dissect_reply_X },
 	{ "!", dissect_cmd_enable_extended, dissect_reply_enable_extended },
 	{ "QDisableRandomization", dissect_cmd_QDisableRandomization, dissect_reply_QDisableRandomization },
+	{ "T", dissect_cmd_T, dissect_reply_T },
 };
 
 static struct dissect_command_t *find_command(tvbuff_t *tvb, guint offset) {

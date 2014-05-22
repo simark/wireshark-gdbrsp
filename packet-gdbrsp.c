@@ -59,6 +59,8 @@ static int hf_reply_in = -1;
 static int hf_ack_to = -1;
 static int hf_reply_ok_error = -1;
 static int hf_disable_randomization = -1;
+static int hf_vcont_action = -1;
+static int hf_vcont_is_supported = -1;
 
 // strlen("#XX");
 static const guint crc_len = 3;
@@ -111,6 +113,26 @@ struct gdbrsp_conv_data {
 char* ack_types[] =
 { "Packet received correctly", "Retransmission requested", };
 
+
+static const char *vcont_command_description(char c) {
+	switch (c) {
+		case 'c':
+			return "Continue";
+		case 'C':
+			return "Continue with signal";
+		case 's':
+			return "Step";
+		case 'S':
+			return "Step with signal";
+		case 't':
+			return "Stop";
+		case 'r':
+			return "Range step";
+	}
+
+	return NULL;
+}
+
 static void dissect_ok_error_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
     struct gdbrsp_conv_data *conv) {
 	if (msg_len == 0) {
@@ -129,12 +151,69 @@ static void dissect_ok_error_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 	}
 }
 
+static void dissect_cmd_vCont_supported(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
+    struct gdbrsp_conv_data *conv) {
+
+}
+
+static void dissect_reply_vCont_supported(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
+    struct gdbrsp_conv_data *conv) {
+
+	size_t vcont_strlen = strlen("vCont");
+	proto_item *ti;
+	gchar c;
+	gchar *feature;
+	const char *feature_description;
+
+	if (tvb_strneql(tvb, offset, "vCont", vcont_strlen)) {
+		proto_tree_add_boolean(tree, hf_vcont_is_supported, tvb, offset, 0, FALSE);
+	} else {
+		proto_tree_add_boolean(tree, hf_vcont_is_supported, tvb, offset, vcont_strlen, TRUE);
+
+
+
+		// Skip vCont
+		offset += vcont_strlen;
+
+		ti = proto_tree_add_text(tree, tvb, offset, msg_len - vcont_strlen, "Supported commands");
+		tree = proto_item_add_subtree(ti, ett_qsupported);
+
+		c = tvb_get_guint8(tvb, offset);
+		while (c == ';') {
+			feature = (gchar*) tvb_get_ephemeral_string(tvb, offset + 1, 1);
+			feature_description = vcont_command_description(feature[0]);
+
+			if (tree) {
+				proto_tree_add_string_format_value(tree, hf_qsupported, tvb, offset + 1, 1, feature, "%s (%s)", feature, feature_description);
+			}
+
+			offset += 2;
+			c = tvb_get_guint8(tvb, offset);
+		}
+
+	}
+}
+
 static void dissect_cmd_vCont(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
     struct gdbrsp_conv_data *conv) {
+	gchar action_char;
+	const char *action = NULL;
+
+	// Skip ;
+	offset++;
+
+	action_char = tvb_get_guint8(tvb, offset);
+
+	action = vcont_command_description(action_char);
+
+	if (action_char) {
+		proto_tree_add_string(tree, hf_vcont_action, tvb, offset, 1, action);
+	}
 }
 
 static void dissect_reply_vCont(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
     struct gdbrsp_conv_data *conv) {
+	dissect_ok_error_reply(tvb, pinfo, tree, offset, msg_len, conv);
 }
 
 static void dissect_cmd_vKill(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
@@ -473,8 +552,10 @@ static void dissect_reply_T(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 	dissect_ok_error_reply(tvb, pinfo, tree, offset, msg_len, conv);
 }
 
-
+/* The order is important here. For example, vCont? must be before vCont,
+ * otherwise vCont would match vCont? packets. */
 static struct dissect_command_t cmd_cbs[] = {
+	{ "vCont?", dissect_cmd_vCont_supported, dissect_reply_vCont_supported },
 	{ "vCont", dissect_cmd_vCont, dissect_reply_vCont },
 	{ "vKill", dissect_cmd_vKill, dissect_reply_vKill },
 	{ "vRun", dissect_cmd_vRun, dissect_reply_vRun },
@@ -1014,6 +1095,32 @@ static hf_register_info hf_gdbrsp[] =
 		{
 			"Disable randomization", // name
 			"gdbrsp.disable_randomization", // abbrev
+			FT_BOOLEAN, // type
+			BASE_NONE, // display
+			&tfs_yes_no, // strings
+			0x0, // bitmask
+			NULL, // blurb
+			HFILL
+		}
+	},
+	{
+		&hf_vcont_action,
+		{
+			"Action", // name
+			"gdbrsp.action", // abbrev
+			FT_STRING, // type
+			BASE_NONE, // display
+			0, // strings
+			0x0, // bitmask
+			NULL, // blurb
+			HFILL
+		}
+	},
+	{
+		&hf_vcont_is_supported,
+		{
+			"vCont support", // name
+			"gdbrsp.vcont_supported", // abbrev
 			FT_BOOLEAN, // type
 			BASE_NONE, // display
 			&tfs_yes_no, // strings

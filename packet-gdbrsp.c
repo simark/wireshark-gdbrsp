@@ -70,11 +70,7 @@ static int hf_doc_link = -1;
 static const guint crc_len = 3;
 
 enum gdb_msg_type {
-  GDB_HOST_QUERY,
-  GDB_HOST_ACK,
-  GDB_STUB_REPLY,
-  GDB_STUB_ACK,
-  GDB_NOTIFICATION,
+	GDB_HOST_QUERY, GDB_HOST_ACK, GDB_STUB_REPLY, GDB_STUB_ACK, GDB_NOTIFICATION,
 };
 
 struct gdbrsp_conv_data;
@@ -82,9 +78,9 @@ struct gdbrsp_conv_data;
 struct dissect_command_t {
 	const char *command;
 	void (*command_handler)(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-	    struct gdbrsp_conv_data *conv);
+			struct gdbrsp_conv_data *conv);
 	void (*reply_handler)(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-	    struct gdbrsp_conv_data *conv);
+			struct gdbrsp_conv_data *conv);
 	const char *doc_url;
 };
 
@@ -115,8 +111,7 @@ struct gdbrsp_conv_data {
 	int disable_ack_at_next_host_ack;
 };
 
-char* ack_types[] =
-{ "Packet received correctly", "Retransmission requested", };
+char* ack_types[] = { "Packet received correctly", "Retransmission requested", };
 
 const char *gdb_signal_names[] = {
 #define SET(symbol, constant, name, string) name,
@@ -135,8 +130,7 @@ struct split_result {
 	const guint8 *val;
 };
 
-static GArray *split_semicolon_payload(tvbuff_t *tvb, guint offset, guint msg_len)
-{
+static GArray *split_semicolon_payload(tvbuff_t *tvb, guint offset, guint msg_len) {
 	struct split_result elem;
 	GArray *ret = g_array_new(FALSE, FALSE, sizeof(elem));
 	gint found_offset;
@@ -145,7 +139,6 @@ static GArray *split_semicolon_payload(tvbuff_t *tvb, guint offset, guint msg_le
 	found_offset = tvb_find_guint8(tvb, offset, msg_len, ';');
 	while (found_offset != -1) {
 		const guint8 *val = tvb_get_ephemeral_string(tvb, offset, found_offset - offset);
-
 
 		elem.offset_start = offset;
 		elem.val = val;
@@ -158,37 +151,36 @@ static GArray *split_semicolon_payload(tvbuff_t *tvb, guint offset, guint msg_le
 	}
 
 	if (end_offset - offset) {
-			elem.val = tvb_get_ephemeral_string(tvb, offset, end_offset - offset);
+		elem.val = tvb_get_ephemeral_string(tvb, offset, end_offset - offset);
 		elem.offset_start = offset;
 
 		g_array_append_val(ret, elem);
 	}
-
 
 	return ret;
 }
 
 static const char *vcont_command_description(char c) {
 	switch (c) {
-		case 'c':
-			return "Continue";
-		case 'C':
-			return "Continue with signal";
-		case 's':
-			return "Step";
-		case 'S':
-			return "Step with signal";
-		case 't':
-			return "Stop";
-		case 'r':
-			return "Range step";
+	case 'c':
+		return "Continue";
+	case 'C':
+		return "Continue with signal";
+	case 's':
+		return "Step";
+	case 'S':
+		return "Step with signal";
+	case 't':
+		return "Stop";
+	case 'r':
+		return "Range step";
 	}
 
 	return NULL;
 }
 
 static void dissect_ok_error_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 	if (msg_len == 0) {
 		proto_tree_add_string(tree, hf_reply_ok_error, tvb, offset, msg_len, "Target does not support this command");
 		return;
@@ -205,13 +197,13 @@ static void dissect_ok_error_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 	}
 }
 
-static void dissect_cmd_vCont_supported(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+static void dissect_cmd_vCont_supported(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset,
+		guint msg_len, struct gdbrsp_conv_data *conv) {
 
 }
 
-static void dissect_reply_vCont_supported(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+static void dissect_reply_vCont_supported(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset,
+		guint msg_len, struct gdbrsp_conv_data *conv) {
 
 	size_t vcont_strlen = strlen("vCont");
 	proto_item *ti;
@@ -223,8 +215,6 @@ static void dissect_reply_vCont_supported(tvbuff_t *tvb, packet_info *pinfo, pro
 		proto_tree_add_boolean(tree, hf_vcont_is_supported, tvb, offset, 0, FALSE);
 	} else {
 		proto_tree_add_boolean(tree, hf_vcont_is_supported, tvb, offset, vcont_strlen, TRUE);
-
-
 
 		// Skip vCont
 		offset += vcont_strlen;
@@ -238,7 +228,8 @@ static void dissect_reply_vCont_supported(tvbuff_t *tvb, packet_info *pinfo, pro
 			feature_description = vcont_command_description(feature[0]);
 
 			if (tree) {
-				proto_tree_add_string_format(tree, hf_qsupported, tvb, offset + 1, 1, feature, "%s (%s)", feature, feature_description);
+				proto_tree_add_string_format(tree, hf_qsupported, tvb, offset + 1, 1, feature, "%s (%s)", feature,
+						feature_description);
 			}
 
 			offset += 2;
@@ -249,7 +240,7 @@ static void dissect_reply_vCont_supported(tvbuff_t *tvb, packet_info *pinfo, pro
 }
 
 static void dissect_cmd_vCont(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 	gchar action_char;
 	const char *action = NULL;
 
@@ -266,36 +257,36 @@ static void dissect_cmd_vCont(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
 }
 
 static void dissect_reply_vCont(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 	dissect_ok_error_reply(tvb, pinfo, tree, offset, msg_len, conv);
 }
 
 static void dissect_cmd_vKill(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_reply_vKill(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_cmd_vRun(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_reply_vRun(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_cmd_vStopped(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_reply_vStopped(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_qSupported(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 	proto_item *ti;
 
 	if (tree) {
@@ -309,37 +300,38 @@ static void dissect_qSupported(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 	for (i = 0; i < elements->len; i++) {
 		struct split_result res = g_array_index(elements, struct split_result, i);
 
-		proto_tree_add_string_format(tree, hf_qsupported, tvb, res.offset_start, strlen((const char*)res.val), (const char*)res.val, "%s", (const char*)res.val);
+		proto_tree_add_string_format(tree, hf_qsupported, tvb, res.offset_start, strlen((const char*) res.val),
+				(const char*) res.val, "%s", (const char*) res.val);
 	}
 
 	g_array_free(elements, TRUE);
 }
 
 static void dissect_cmd_qSupported(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 	offset++;
 	msg_len--;
 	dissect_qSupported(tvb, pinfo, tree, offset, msg_len, conv);
 }
 
 static void dissect_reply_qSupported(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 	dissect_qSupported(tvb, pinfo, tree, offset, msg_len, conv);
 }
 
 static void dissect_cmd_QStartNoAckMode(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset,
-    guint msg_len, struct gdbrsp_conv_data *conv) {
+		guint msg_len, struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_reply_QStartNoAckMode(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset,
-    guint msg_len, struct gdbrsp_conv_data *conv) {
+		guint msg_len, struct gdbrsp_conv_data *conv) {
 	conv->disable_ack_at_next_host_ack = 1;
 
 	dissect_ok_error_reply(tvb, pinfo, tree, offset, msg_len, conv);
 }
 
 static void dissect_cmd_QProgramSignals(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset,
-    guint msg_len, struct gdbrsp_conv_data *conv) {
+		guint msg_len, struct gdbrsp_conv_data *conv) {
 	// Skip :
 	offset++;
 	msg_len--;
@@ -353,12 +345,12 @@ static void dissect_cmd_QProgramSignals(tvbuff_t *tvb, packet_info *pinfo, proto
 
 	for (i = 0; i < elements->len; i++) {
 		struct split_result res = g_array_index(elements, struct split_result, i);
-		unsigned long signal_number = strtoul((const char*)res.val, NULL, 16);
+		unsigned long signal_number = strtoul((const char*) res.val, NULL, 16);
 		const char *signal_name = gdb_signal_names[signal_number];
 		const char *signal_desc = gdb_signal_descriptions[signal_number];
 
-		proto_tree_add_uint_format(tree, hf_program_signal, tvb, res.offset_start,
-			strlen((char*) res.val), signal_number, "%lu - %s - %s", signal_number, signal_name, signal_desc);
+		proto_tree_add_uint_format(tree, hf_program_signal, tvb, res.offset_start, strlen((char*) res.val),
+				signal_number, "%lu - %s - %s", signal_number, signal_name, signal_desc);
 
 //		printf("Signal %s %d\n", res.val, res.offset_start);
 	}
@@ -367,257 +359,258 @@ static void dissect_cmd_QProgramSignals(tvbuff_t *tvb, packet_info *pinfo, proto
 }
 
 static void dissect_reply_QProgramSignals(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset,
-    guint msg_len, struct gdbrsp_conv_data *conv) {
+		guint msg_len, struct gdbrsp_conv_data *conv) {
 	dissect_ok_error_reply(tvb, pinfo, tree, offset, msg_len, conv);
 }
 
 static void dissect_cmd_H(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_reply_H(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 	dissect_ok_error_reply(tvb, pinfo, tree, offset, msg_len, conv);
 }
 
 static void dissect_cmd_qXfer(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_reply_qXfer(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_cmd_QNonStop(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_reply_QNonStop(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 	dissect_ok_error_reply(tvb, pinfo, tree, offset, msg_len, conv);
 }
 
 static void dissect_cmd_qAttached(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_reply_qAttached(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_cmd_qTStatus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_reply_qTStatus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_cmd_qTfV(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_reply_qTfV(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_cmd_qTfP(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_reply_qTfP(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_cmd_qTsV(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_reply_qTsV(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 /* The ? command */
 static void dissect_cmd_haltreason(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_reply_haltreason(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_cmd_qC(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_reply_qC(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_cmd_qOffsets(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_reply_qOffsets(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_cmd_QPassSignal(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_reply_QPassSignal(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_cmd_qSymbol(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_reply_qSymbol(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_cmd_m(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
-		struct per_packet_data *pdata = p_get_proto_data(pinfo->fd, proto_gdbrsp, 0);
-		guint8 digit = 0;
+		struct gdbrsp_conv_data *conv) {
+	struct per_packet_data *pdata = p_get_proto_data(pinfo->fd, proto_gdbrsp, 0);
+	guint8 digit = 0;
 
-		guint start_offset = offset;
+	guint start_offset = offset;
 
-		digit = tvb_get_guint8(tvb, offset);
-		while (digit != ',') {
-			if (!isxdigit(digit)) {
-				// Whaaaaat
-				return;
-			}
-
-			offset++;
-			digit = tvb_get_guint8(tvb, offset);
+	digit = tvb_get_guint8(tvb, offset);
+	while (digit != ',') {
+		if (!isxdigit(digit)) {
+			// Whaaaaat
+			return;
 		}
 
-		gchar *address = (gchar*) tvb_get_ephemeral_string(tvb, start_offset, offset - start_offset);
-		proto_tree_add_string_format_value(tree, hf_address, tvb, start_offset, offset - start_offset, address, "0x%s", address);
-
-		// Skip ,
 		offset++;
-
-		start_offset = offset;
-
 		digit = tvb_get_guint8(tvb, offset);
-		while (digit != '#') {
-			if (!isxdigit(digit)) {
-				// Whaaaaat
-				return;
-			}
+	}
 
-			offset++;
-			digit = tvb_get_guint8(tvb, offset);
+	gchar *address = (gchar*) tvb_get_ephemeral_string(tvb, start_offset, offset - start_offset);
+	proto_tree_add_string_format_value(tree, hf_address, tvb, start_offset, offset - start_offset, address, "0x%s",
+			address);
+
+	// Skip ,
+	offset++;
+
+	start_offset = offset;
+
+	digit = tvb_get_guint8(tvb, offset);
+	while (digit != '#') {
+		if (!isxdigit(digit)) {
+			// Whaaaaat
+			return;
 		}
 
-		gchar *len = (gchar*) tvb_get_ephemeral_string(tvb, start_offset, offset - start_offset);
-		long lenn = strtol(len, NULL, 16);
-		proto_tree_add_int(tree, hf_length, tvb, start_offset, offset - start_offset, lenn);
+		offset++;
+		digit = tvb_get_guint8(tvb, offset);
+	}
 
-		pdata->u.m.requested_len = lenn;
+	gchar *len = (gchar*) tvb_get_ephemeral_string(tvb, start_offset, offset - start_offset);
+	long lenn = strtol(len, NULL, 16);
+	proto_tree_add_int(tree, hf_length, tvb, start_offset, offset - start_offset, lenn);
+
+	pdata->u.m.requested_len = lenn;
 }
 
 static void dissect_reply_m(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
-		int expected_len = conv->last_request_data->u.m.requested_len;
-		printf("dissect_reply_m pre-allocating %d bytes\n", expected_len);
-		GArray *bytes = g_array_sized_new(FALSE, FALSE, sizeof(guint8), expected_len);
+		struct gdbrsp_conv_data *conv) {
+	int expected_len = conv->last_request_data->u.m.requested_len;
+	printf("dissect_reply_m pre-allocating %d bytes\n", expected_len);
+	GArray *bytes = g_array_sized_new(FALSE, FALSE, sizeof(guint8), expected_len);
 
-		guint8 b;
-		guint start_offset = offset;
+	guint8 b;
+	guint start_offset = offset;
 
+	b = tvb_get_guint8(tvb, offset);
+	while (isxdigit(b)) {
+		g_array_append_val(bytes, b);
+		offset++;
 		b = tvb_get_guint8(tvb, offset);
-		while (isxdigit(b)) {
-			g_array_append_val(bytes, b);
-			offset++;
-			b = tvb_get_guint8(tvb, offset);
-		}
+	}
 
-		proto_tree_add_bytes(tree, hf_bytes, tvb, start_offset, offset - start_offset, (guint8*)bytes->data);
-		g_array_free(bytes, TRUE);
+	proto_tree_add_bytes(tree, hf_bytes, tvb, start_offset, offset - start_offset, (guint8*) bytes->data);
+	g_array_free(bytes, TRUE);
 }
 
 static void dissect_cmd_Z(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_reply_Z(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_cmd_g(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_reply_g(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_cmd_G(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_reply_G(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 	dissect_ok_error_reply(tvb, pinfo, tree, offset, msg_len, conv);
 }
 
 static void dissect_cmd_P(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_reply_P(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 	dissect_ok_error_reply(tvb, pinfo, tree, offset, msg_len, conv);
 }
 
 static void dissect_cmd_X(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_reply_X(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 	dissect_ok_error_reply(tvb, pinfo, tree, offset, msg_len, conv);
 }
 
 /* The ! command */
-static void dissect_cmd_enable_extended(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+static void dissect_cmd_enable_extended(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset,
+		guint msg_len, struct gdbrsp_conv_data *conv) {
 
 }
 
-static void dissect_reply_enable_extended(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+static void dissect_reply_enable_extended(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset,
+		guint msg_len, struct gdbrsp_conv_data *conv) {
 	dissect_ok_error_reply(tvb, pinfo, tree, offset, msg_len, conv);
 }
 
-static void dissect_cmd_QDisableRandomization(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
-	    guint8 c = tvb_get_guint8(tvb, offset + 1);
+static void dissect_cmd_QDisableRandomization(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset,
+		guint msg_len, struct gdbrsp_conv_data *conv) {
+	guint8 c = tvb_get_guint8(tvb, offset + 1);
 
-	    if (c == '1') {
-		    proto_tree_add_boolean(tree, hf_disable_randomization, tvb, offset + 1, 1, TRUE);
-	    } else if (c == '0') {
-		    proto_tree_add_boolean(tree, hf_disable_randomization, tvb, offset + 1, 1, FALSE);
-	    }
+	if (c == '1') {
+		proto_tree_add_boolean(tree, hf_disable_randomization, tvb, offset + 1, 1, TRUE);
+	} else if (c == '0') {
+		proto_tree_add_boolean(tree, hf_disable_randomization, tvb, offset + 1, 1, FALSE);
+	}
 }
 
-static void dissect_reply_QDisableRandomization(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+static void dissect_reply_QDisableRandomization(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset,
+		guint msg_len, struct gdbrsp_conv_data *conv) {
 	dissect_ok_error_reply(tvb, pinfo, tree, offset, msg_len, conv);
 }
 
 static void dissect_cmd_T(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 }
 
 static void dissect_reply_T(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 	dissect_ok_error_reply(tvb, pinfo, tree, offset, msg_len, conv);
 }
 
@@ -671,7 +664,7 @@ static struct dissect_command_t *find_command(tvbuff_t *tvb, guint offset) {
 }
 
 static void dissect_one_host_query(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 	struct dissect_command_t *cmd;
 	int command_name_len = 0;
 	printf("Host query\n");
@@ -719,7 +712,7 @@ static void dissect_one_host_query(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 	}
 }
 static void dissect_one_stub_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 	struct dissect_command_t *cmd;
 	printf("Stub reply\n");
 	col_append_str(pinfo->cinfo, COL_INFO, "Stub reply");
@@ -758,7 +751,7 @@ static void dissect_one_stub_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 }
 
 static void dissect_one_ack(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 	printf("Stub ack %d\n", msg_len);
 
 	struct per_packet_data *packet_data = p_get_proto_data(pinfo->fd, proto_gdbrsp, 0);
@@ -782,7 +775,7 @@ static void dissect_one_ack(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 }
 
 static void dissect_one_host_ack(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 	printf("Host ack %d\n", msg_len);
 
 	if (!pinfo->fd->flags.visited) {
@@ -797,13 +790,13 @@ static void dissect_one_host_ack(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 }
 
 static void dissect_one_stub_ack(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 	dissect_one_ack(tvb, pinfo, tree, offset, msg_len, conv);
 	col_append_str(pinfo->cinfo, COL_INFO, "Stub acknowledgement");
 }
 
 static void dissect_one_notification(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 	col_append_str(pinfo->cinfo, COL_INFO, "Notification");
 	printf("Notification\n");
 }
@@ -826,7 +819,7 @@ static struct gdbrsp_conv_data *get_conv_data(packet_info *pinfo) {
 }
 
 static void dissect_crc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
-    struct gdbrsp_conv_data *conv) {
+		struct gdbrsp_conv_data *conv) {
 	int i;
 	char packet_crc[3];
 	char computed_crc[3];
@@ -849,7 +842,7 @@ static void dissect_crc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gui
 		snprintf(computed_crc, 3, "%02x", crc);
 
 		proto_tree_add_uint_format_value(tree, hf_checksum, tvb, i, 2, crc, "%s (computed crc: %s)", packet_crc,
-		    computed_crc);
+				computed_crc);
 	}
 }
 

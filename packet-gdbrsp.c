@@ -34,6 +34,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <epan/dissectors/packet-tcp.h>
+
 #define gdbrsp_PORT 1234
 
 /* The protocol handle */
@@ -44,6 +45,7 @@ static gint ett_gdbrsp = -1;
 
 /* Other subtrees */
 static gint ett_qsupported = -1;
+static gint ett_program_signals = -1;
 
 /* Variables for fields */
 static int hf_command = -1;
@@ -61,6 +63,7 @@ static int hf_reply_ok_error = -1;
 static int hf_disable_randomization = -1;
 static int hf_vcont_action = -1;
 static int hf_vcont_is_supported = -1;
+static int hf_program_signal = -1;
 
 // strlen("#XX");
 static const guint crc_len = 3;
@@ -113,6 +116,45 @@ struct gdbrsp_conv_data {
 char* ack_types[] =
 { "Packet received correctly", "Retransmission requested", };
 
+const char *gdb_signal_names[] = {
+#define SET(symbol, constant, name, string) name,
+#include "signals.def"
+#undef SET
+};
+
+const char *gdb_signal_descriptions[] = {
+#define SET(symbol, constant, name, string) string,
+#include "signals.def"
+#undef SET
+};
+
+struct split_result {
+	gint offset_start;
+	const guint8 *val;
+};
+
+static GArray *split_semicolon_payload(tvbuff_t *tvb, guint offset, guint msg_len)
+{
+	GArray *ret = g_array_new(FALSE, FALSE, sizeof(struct split_result));
+	gint found_offset;
+
+	found_offset = tvb_find_guint8(tvb, offset, msg_len, ';');
+	while (found_offset != -1) {
+		const guint8 *val = tvb_get_ephemeral_string(tvb, offset, found_offset - offset);
+
+		struct split_result elem;
+		elem.offset_start = offset;
+		elem.val = val;
+
+		g_array_append_val(ret, elem);
+
+		// Skip the ;
+		offset = found_offset + 1;
+		found_offset = tvb_find_guint8(tvb, offset, msg_len, ';');
+	}
+
+	return ret;
+}
 
 static const char *vcont_command_description(char c) {
 	switch (c) {
@@ -295,6 +337,30 @@ static void dissect_reply_QStartNoAckMode(tvbuff_t *tvb, packet_info *pinfo, pro
 
 static void dissect_cmd_QProgramSignals(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset,
     guint msg_len, struct gdbrsp_conv_data *conv) {
+	// Skip :
+	offset++;
+	msg_len--;
+
+	gint i;
+	GArray *elements = split_semicolon_payload(tvb, offset, msg_len);
+	proto_tree *ti;
+
+	ti = proto_tree_add_text(tree, tvb, offset, msg_len, "Signals to pass to the program");
+	tree = proto_item_add_subtree(ti, ett_program_signals);
+
+	for (i = 0; i < elements->len; i++) {
+		struct split_result res = g_array_index(elements, struct split_result, i);
+		unsigned long signal_number = strtoul((const char*)res.val, NULL, 16);
+		const char *signal_name = gdb_signal_names[signal_number];
+		const char *signal_desc = gdb_signal_descriptions[signal_number];
+
+		proto_tree_add_uint_format(tree, hf_program_signal, tvb, res.offset_start,
+			strlen((char*) res.val), signal_number, "%lu - %s - %s", signal_number, signal_name, signal_desc);
+
+//		printf("Signal %s %d\n", res.val, res.offset_start);
+	}
+
+	g_array_free(elements, TRUE);
 }
 
 static void dissect_reply_QProgramSignals(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset,
@@ -1129,12 +1195,25 @@ static hf_register_info hf_gdbrsp[] =
 			HFILL
 		}
 	},
+	{
+		&hf_program_signal,
+		{
+			"Signal", // name
+			"gdbrsp.program_signal", // abbrev
+			FT_UINT8, // type
+			BASE_DEC, // display
+			0, // strings
+			0x0, // bitmask
+			NULL, // blurb
+			HFILL
+		}
+	},
 };
 
 void proto_register_gdbrsp(void) {
 
 	static gint *ett_gdbrsp_arr[] =
-	{ &ett_gdbrsp, &ett_qsupported };
+	{ &ett_gdbrsp, &ett_qsupported, &ett_program_signals };
 
 	proto_gdbrsp = proto_register_protocol("GDB Remote Serial Protocol", "GDB RSP", "gdbrsp");
 	proto_register_field_array(proto_gdbrsp, hf_gdbrsp, array_length (hf_gdbrsp));

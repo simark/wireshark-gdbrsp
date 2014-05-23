@@ -233,7 +233,7 @@ static void dissect_reply_vCont_supported(tvbuff_t *tvb, packet_info *pinfo, pro
 			feature_description = vcont_command_description(feature[0]);
 
 			if (tree) {
-				proto_tree_add_string_format_value(tree, hf_qsupported, tvb, offset + 1, 1, feature, "%s (%s)", feature, feature_description);
+				proto_tree_add_string_format(tree, hf_qsupported, tvb, offset + 1, 1, feature, "%s (%s)", feature, feature_description);
 			}
 
 			offset += 2;
@@ -304,7 +304,7 @@ static void dissect_qSupported(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 	for (i = 0; i < elements->len; i++) {
 		struct split_result res = g_array_index(elements, struct split_result, i);
 
-		proto_tree_add_string(tree, hf_qsupported, tvb, res.offset_start, strlen((const char*)res.val), (const char*)res.val);
+		proto_tree_add_string_format(tree, hf_qsupported, tvb, res.offset_start, strlen((const char*)res.val), (const char*)res.val, "%s", (const char*)res.val);
 	}
 
 	g_array_free(elements, TRUE);

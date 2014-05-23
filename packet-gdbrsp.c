@@ -197,6 +197,31 @@ static void dissect_ok_error_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 	}
 }
 
+static void dissect_list_of_signals(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
+		struct gdbrsp_conv_data *conv) {
+	gint i;
+	GArray *elements = split_semicolon_payload(tvb, offset, msg_len);
+	proto_tree *ti;
+
+	if (elements->len > 0) {
+		ti = proto_tree_add_text(tree, tvb, offset, msg_len, "Signals to pass to the program");
+		tree = proto_item_add_subtree(ti, ett_program_signals);
+	}
+
+	for (i = 0; i < elements->len; i++) {
+		struct split_result res = g_array_index(elements, struct split_result, i);
+		unsigned long signal_number = strtoul((const char*) res.val, NULL, 16);
+		const char *signal_name = gdb_signal_names[signal_number];
+		const char *signal_desc = gdb_signal_descriptions[signal_number];
+
+		proto_tree_add_uint_format(tree, hf_program_signal, tvb, res.offset_start, strlen((char*) res.val),
+				signal_number, "%lu - %s - %s", signal_number, signal_name, signal_desc);
+	}
+
+	g_array_free(elements, TRUE);
+
+}
+
 static void dissect_cmd_vCont_supported(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset,
 		guint msg_len, struct gdbrsp_conv_data *conv) {
 
@@ -336,26 +361,7 @@ static void dissect_cmd_QProgramSignals(tvbuff_t *tvb, packet_info *pinfo, proto
 	offset++;
 	msg_len--;
 
-	gint i;
-	GArray *elements = split_semicolon_payload(tvb, offset, msg_len);
-	proto_tree *ti;
-
-	ti = proto_tree_add_text(tree, tvb, offset, msg_len, "Signals to pass to the program");
-	tree = proto_item_add_subtree(ti, ett_program_signals);
-
-	for (i = 0; i < elements->len; i++) {
-		struct split_result res = g_array_index(elements, struct split_result, i);
-		unsigned long signal_number = strtoul((const char*) res.val, NULL, 16);
-		const char *signal_name = gdb_signal_names[signal_number];
-		const char *signal_desc = gdb_signal_descriptions[signal_number];
-
-		proto_tree_add_uint_format(tree, hf_program_signal, tvb, res.offset_start, strlen((char*) res.val),
-				signal_number, "%lu - %s - %s", signal_number, signal_name, signal_desc);
-
-//		printf("Signal %s %d\n", res.val, res.offset_start);
-	}
-
-	g_array_free(elements, TRUE);
+	dissect_list_of_signals(tvb, pinfo, tree, offset, msg_len, conv);
 }
 
 static void dissect_reply_QProgramSignals(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset,
@@ -454,12 +460,18 @@ static void dissect_reply_qOffsets(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 		struct gdbrsp_conv_data *conv) {
 }
 
-static void dissect_cmd_QPassSignal(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
+static void dissect_cmd_QPassSignals(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
 		struct gdbrsp_conv_data *conv) {
+	// Skip :
+	offset++;
+	msg_len--;
+
+	dissect_list_of_signals(tvb, pinfo, tree, offset, msg_len, conv);
 }
 
-static void dissect_reply_QPassSignal(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
+static void dissect_reply_QPassSignals(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
 		struct gdbrsp_conv_data *conv) {
+	dissect_ok_error_reply(tvb, pinfo, tree, offset, msg_len, conv);
 }
 
 static void dissect_cmd_qSymbol(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
@@ -636,7 +648,7 @@ static struct dissect_command_t cmd_cbs[] = {
 	{ "?", dissect_cmd_haltreason, dissect_reply_haltreason, NULL },
 	{ "qC", dissect_cmd_qC, dissect_reply_qC, NULL },
 	{ "qOffsets", dissect_cmd_qOffsets, dissect_reply_qOffsets, NULL },
-	{ "QPassSignal", dissect_cmd_QPassSignal, dissect_reply_QPassSignal, NULL },
+	{ "QPassSignals", dissect_cmd_QPassSignals, dissect_reply_QPassSignals, NULL },
 	{ "qSymbol", dissect_cmd_qSymbol, dissect_reply_qSymbol, NULL },
 	{ "m", dissect_cmd_m, dissect_reply_m, NULL },
 	{ "Z", dissect_cmd_Z, dissect_reply_Z, NULL },

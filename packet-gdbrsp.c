@@ -135,14 +135,16 @@ struct split_result {
 
 static GArray *split_semicolon_payload(tvbuff_t *tvb, guint offset, guint msg_len)
 {
-	GArray *ret = g_array_new(FALSE, FALSE, sizeof(struct split_result));
+	struct split_result elem;
+	GArray *ret = g_array_new(FALSE, FALSE, sizeof(elem));
 	gint found_offset;
+	gint end_offset = offset + msg_len; // past last byte
 
 	found_offset = tvb_find_guint8(tvb, offset, msg_len, ';');
 	while (found_offset != -1) {
 		const guint8 *val = tvb_get_ephemeral_string(tvb, offset, found_offset - offset);
 
-		struct split_result elem;
+
 		elem.offset_start = offset;
 		elem.val = val;
 
@@ -152,6 +154,11 @@ static GArray *split_semicolon_payload(tvbuff_t *tvb, guint offset, guint msg_le
 		offset = found_offset + 1;
 		found_offset = tvb_find_guint8(tvb, offset, msg_len, ';');
 	}
+
+	elem.val = tvb_get_ephemeral_string(tvb, offset, end_offset - offset);
+	elem.offset_start = offset;
+
+	g_array_append_val(ret, elem);
 
 	return ret;
 }
@@ -291,31 +298,22 @@ static void dissect_qSupported(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 		tree = proto_item_add_subtree(ti, ett_qsupported);
 	}
 
-	guint8 c;
+	gint i;
+	GArray *elements = split_semicolon_payload(tvb, offset, msg_len);
 
-	guint offset_start = offset + 1;
-	guint offset_end = offset_start;
+	for (i = 0; i < elements->len; i++) {
+		struct split_result res = g_array_index(elements, struct split_result, i);
 
-	while (offset_end < offset + msg_len) {
-		c = tvb_get_guint8(tvb, offset_end);
-		while (c != ';' && offset_end < offset + msg_len) {
-			offset_end++;
-			c = tvb_get_guint8(tvb, offset_end);
-		}
-
-		gchar *feature = (gchar*) tvb_get_ephemeral_string(tvb, offset_start, offset_end - offset_start);
-
-		if (tree) {
-			proto_tree_add_string(tree, hf_qsupported, tvb, offset_start, offset_end - offset_start, feature);
-		}
-
-		offset_end = offset_end + 1;
-		offset_start = offset_end;
+		proto_tree_add_string(tree, hf_qsupported, tvb, res.offset_start, strlen((const char*)res.val), (const char*)res.val);
 	}
+
+	g_array_free(elements, TRUE);
 }
 
 static void dissect_cmd_qSupported(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
     struct gdbrsp_conv_data *conv) {
+	offset++;
+	msg_len--;
 	dissect_qSupported(tvb, pinfo, tree, offset, msg_len, conv);
 }
 

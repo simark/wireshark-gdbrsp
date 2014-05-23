@@ -647,7 +647,7 @@ static struct dissect_command_t cmd_cbs[] = {
 	{ "?", dissect_cmd_haltreason, dissect_reply_haltreason, NULL },
 	{ "qC", dissect_cmd_qC, dissect_reply_qC, NULL },
 	{ "qOffsets", dissect_cmd_qOffsets, dissect_reply_qOffsets, NULL },
-	{ "QPassSignals", dissect_cmd_QPassSignals, dissect_reply_QPassSignals, NULL },
+	{ "QPassSignals", dissect_cmd_QPassSignals, dissect_reply_QPassSignals, "https://sourceware.org/gdb/onlinedocs/gdb/General-Query-Packets.html#QPassSignals" },
 	{ "qSymbol", dissect_cmd_qSymbol, dissect_reply_qSymbol, NULL },
 	{ "m", dissect_cmd_m, dissect_reply_m, NULL },
 	{ "Z", dissect_cmd_Z, dissect_reply_Z, NULL },

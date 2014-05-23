@@ -130,13 +130,13 @@ struct split_result {
 	const guint8 *val;
 };
 
-static GArray *split_semicolon_payload(tvbuff_t *tvb, guint offset, guint msg_len) {
+static GArray *split_payload(tvbuff_t *tvb, guint offset, guint msg_len, gchar split_char) {
 	struct split_result elem;
 	GArray *ret = g_array_new(FALSE, FALSE, sizeof(elem));
 	gint found_offset;
 	gint end_offset = offset + msg_len; // past last byte
 
-	found_offset = tvb_find_guint8(tvb, offset, msg_len, ';');
+	found_offset = tvb_find_guint8(tvb, offset, msg_len, split_char);
 	while (found_offset != -1) {
 		const guint8 *val = tvb_get_ephemeral_string(tvb, offset, found_offset - offset);
 
@@ -147,7 +147,7 @@ static GArray *split_semicolon_payload(tvbuff_t *tvb, guint offset, guint msg_le
 
 		// Skip the ;
 		offset = found_offset + 1;
-		found_offset = tvb_find_guint8(tvb, offset, msg_len, ';');
+		found_offset = tvb_find_guint8(tvb, offset, msg_len, split_char);
 	}
 
 	if (end_offset - offset) {
@@ -200,7 +200,7 @@ static void dissect_ok_error_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 static void dissect_list_of_signals(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
 		struct gdbrsp_conv_data *conv) {
 	gint i;
-	GArray *elements = split_semicolon_payload(tvb, offset, msg_len);
+	GArray *elements = split_payload(tvb, offset, msg_len, ';');
 	proto_tree *ti;
 
 	if (elements->len > 0) {
@@ -319,7 +319,7 @@ static void dissect_qSupported(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 	}
 
 	gint i;
-	GArray *elements = split_semicolon_payload(tvb, offset, msg_len);
+	GArray *elements = split_payload(tvb, offset, msg_len, ';');
 
 	for (i = 0; i < elements->len; i++) {
 		struct split_result res = g_array_index(elements, struct split_result, i);

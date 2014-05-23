@@ -64,6 +64,7 @@ static int hf_disable_randomization = -1;
 static int hf_vcont_action = -1;
 static int hf_vcont_is_supported = -1;
 static int hf_program_signal = -1;
+static int hf_doc_link = -1;
 
 // strlen("#XX");
 static const guint crc_len = 3;
@@ -79,11 +80,12 @@ enum gdb_msg_type {
 struct gdbrsp_conv_data;
 
 struct dissect_command_t {
-	char *command;
+	const char *command;
 	void (*command_handler)(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
 	    struct gdbrsp_conv_data *conv);
 	void (*reply_handler)(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
 	    struct gdbrsp_conv_data *conv);
+	const char *doc_url;
 };
 
 struct per_packet_data {
@@ -619,36 +621,36 @@ static void dissect_reply_T(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 /* The order is important here. For example, vCont? must be before vCont,
  * otherwise vCont would match vCont? packets. */
 static struct dissect_command_t cmd_cbs[] = {
-	{ "vCont?", dissect_cmd_vCont_supported, dissect_reply_vCont_supported },
-	{ "vCont", dissect_cmd_vCont, dissect_reply_vCont },
-	{ "vKill", dissect_cmd_vKill, dissect_reply_vKill },
-	{ "vRun", dissect_cmd_vRun, dissect_reply_vRun },
-	{ "vStopped", dissect_cmd_vStopped, dissect_reply_vStopped },
-	{ "qSupported", dissect_cmd_qSupported, dissect_reply_qSupported },
-	{ "QStartNoAckMode", dissect_cmd_QStartNoAckMode, dissect_reply_QStartNoAckMode },
-	{ "QProgramSignals", dissect_cmd_QProgramSignals, dissect_reply_QProgramSignals },
-	{ "H", dissect_cmd_H, dissect_reply_H },
-	{ "qXfer", dissect_cmd_qXfer, dissect_reply_qXfer },
-	{ "QNonStop", dissect_cmd_QNonStop, dissect_reply_QNonStop },
-	{ "qAttached", dissect_cmd_qAttached, dissect_reply_qAttached },
-	{ "qTStatus", dissect_cmd_qTStatus, dissect_reply_qTStatus },
-	{ "qTfV", dissect_cmd_qTfV, dissect_reply_qTfV },
-	{ "qTfP", dissect_cmd_qTfP, dissect_reply_qTfP },
-	{ "qTsV", dissect_cmd_qTsV, dissect_reply_qTsV },
-	{ "?", dissect_cmd_haltreason, dissect_reply_haltreason },
-	{ "qC", dissect_cmd_qC, dissect_reply_qC },
-	{ "qOffsets", dissect_cmd_qOffsets, dissect_reply_qOffsets },
-	{ "QPassSignal", dissect_cmd_QPassSignal, dissect_reply_QPassSignal },
-	{ "qSymbol", dissect_cmd_qSymbol, dissect_reply_qSymbol },
-	{ "m", dissect_cmd_m, dissect_reply_m },
-	{ "Z", dissect_cmd_Z, dissect_reply_Z },
-	{ "g", dissect_cmd_g, dissect_reply_g },
-	{ "G", dissect_cmd_G, dissect_reply_G },
-	{ "P", dissect_cmd_P, dissect_reply_P },
-	{ "X", dissect_cmd_X, dissect_reply_X },
-	{ "!", dissect_cmd_enable_extended, dissect_reply_enable_extended },
-	{ "QDisableRandomization", dissect_cmd_QDisableRandomization, dissect_reply_QDisableRandomization },
-	{ "T", dissect_cmd_T, dissect_reply_T },
+	{ "vCont?", dissect_cmd_vCont_supported, dissect_reply_vCont_supported, NULL },
+	{ "vCont", dissect_cmd_vCont, dissect_reply_vCont, "https://sourceware.org/gdb/onlinedocs/gdb/Packets.html#vCont-packet" },
+	{ "vKill", dissect_cmd_vKill, dissect_reply_vKill, NULL },
+	{ "vRun", dissect_cmd_vRun, dissect_reply_vRun, NULL },
+	{ "vStopped", dissect_cmd_vStopped, dissect_reply_vStopped, NULL },
+	{ "qSupported", dissect_cmd_qSupported, dissect_reply_qSupported, NULL },
+	{ "QStartNoAckMode", dissect_cmd_QStartNoAckMode, dissect_reply_QStartNoAckMode, NULL },
+	{ "QProgramSignals", dissect_cmd_QProgramSignals, dissect_reply_QProgramSignals, "https://sourceware.org/gdb/onlinedocs/gdb/General-Query-Packets.html#QProgramSignals" },
+	{ "H", dissect_cmd_H, dissect_reply_H, NULL },
+	{ "qXfer", dissect_cmd_qXfer, dissect_reply_qXfer, NULL },
+	{ "QNonStop", dissect_cmd_QNonStop, dissect_reply_QNonStop, NULL },
+	{ "qAttached", dissect_cmd_qAttached, dissect_reply_qAttached, NULL },
+	{ "qTStatus", dissect_cmd_qTStatus, dissect_reply_qTStatus, NULL },
+	{ "qTfV", dissect_cmd_qTfV, dissect_reply_qTfV, NULL },
+	{ "qTfP", dissect_cmd_qTfP, dissect_reply_qTfP, NULL },
+	{ "qTsV", dissect_cmd_qTsV, dissect_reply_qTsV, NULL },
+	{ "?", dissect_cmd_haltreason, dissect_reply_haltreason, NULL },
+	{ "qC", dissect_cmd_qC, dissect_reply_qC, NULL },
+	{ "qOffsets", dissect_cmd_qOffsets, dissect_reply_qOffsets, NULL },
+	{ "QPassSignal", dissect_cmd_QPassSignal, dissect_reply_QPassSignal, NULL },
+	{ "qSymbol", dissect_cmd_qSymbol, dissect_reply_qSymbol, NULL },
+	{ "m", dissect_cmd_m, dissect_reply_m, NULL },
+	{ "Z", dissect_cmd_Z, dissect_reply_Z, NULL },
+	{ "g", dissect_cmd_g, dissect_reply_g, NULL },
+	{ "G", dissect_cmd_G, dissect_reply_G, NULL },
+	{ "P", dissect_cmd_P, dissect_reply_P, NULL },
+	{ "X", dissect_cmd_X, dissect_reply_X, NULL },
+	{ "!", dissect_cmd_enable_extended, dissect_reply_enable_extended, NULL },
+	{ "QDisableRandomization", dissect_cmd_QDisableRandomization, dissect_reply_QDisableRandomization, NULL },
+	{ "T", dissect_cmd_T, dissect_reply_T, NULL },
 };
 
 static struct dissect_command_t *find_command(tvbuff_t *tvb, guint offset) {
@@ -709,6 +711,8 @@ static void dissect_one_host_query(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 		if (packet_data->matching_framenum > 0) {
 			proto_tree_add_uint(tree, hf_reply_in, tvb, 0, 0, packet_data->matching_framenum);
 		}
+		proto_item *pi = proto_tree_add_string(tree, hf_doc_link, tvb, 0, 0, cmd->doc_url);
+		PROTO_ITEM_SET_URL(pi);
 	}
 }
 static void dissect_one_stub_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
@@ -1200,6 +1204,19 @@ static hf_register_info hf_gdbrsp[] =
 			"gdbrsp.program_signal", // abbrev
 			FT_UINT8, // type
 			BASE_DEC, // display
+			0, // strings
+			0x0, // bitmask
+			NULL, // blurb
+			HFILL
+		}
+	},
+	{
+		&hf_doc_link,
+		{
+			"Documentation", // name
+			"gdbrsp.documentation", // abbrev
+			FT_STRING, // type
+			BASE_NONE, // display
 			0, // strings
 			0x0, // bitmask
 			NULL, // blurb

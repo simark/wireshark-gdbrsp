@@ -206,20 +206,19 @@ static void dissect_list_of_signals(tvbuff_t *tvb, packet_info *pinfo, proto_tre
 	if (elements->len > 0) {
 		ti = proto_tree_add_text(tree, tvb, offset, msg_len, "Signals to pass to the program");
 		tree = proto_item_add_subtree(ti, ett_program_signals);
-	}
 
-	for (i = 0; i < elements->len; i++) {
-		struct split_result res = g_array_index(elements, struct split_result, i);
-		unsigned long signal_number = strtoul((const char*) res.val, NULL, 16);
-		const char *signal_name = gdb_signal_names[signal_number];
-		const char *signal_desc = gdb_signal_descriptions[signal_number];
+		for (i = 0; i < elements->len; i++) {
+			struct split_result res = g_array_index(elements, struct split_result, i);
+			unsigned long signal_number = strtoul((const char*) res.val, NULL, 16);
+			const char *signal_name = gdb_signal_names[signal_number];
+			const char *signal_desc = gdb_signal_descriptions[signal_number];
 
-		proto_tree_add_uint_format(tree, hf_program_signal, tvb, res.offset_start, strlen((char*) res.val),
-				signal_number, "%lu - %s - %s", signal_number, signal_name, signal_desc);
+			proto_tree_add_uint_format(tree, hf_program_signal, tvb, res.offset_start, strlen((char*) res.val),
+					signal_number, "%lu - %s - %s", signal_number, signal_name, signal_desc);
+		}
 	}
 
 	g_array_free(elements, TRUE);
-
 }
 
 static void dissect_cmd_vCont_supported(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset,

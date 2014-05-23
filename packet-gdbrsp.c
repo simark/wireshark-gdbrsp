@@ -157,10 +157,13 @@ static GArray *split_semicolon_payload(tvbuff_t *tvb, guint offset, guint msg_le
 		found_offset = tvb_find_guint8(tvb, offset, msg_len, ';');
 	}
 
-	elem.val = tvb_get_ephemeral_string(tvb, offset, end_offset - offset);
-	elem.offset_start = offset;
+	if (end_offset - offset) {
+			elem.val = tvb_get_ephemeral_string(tvb, offset, end_offset - offset);
+		elem.offset_start = offset;
 
-	g_array_append_val(ret, elem);
+		g_array_append_val(ret, elem);
+	}
+
 
 	return ret;
 }

@@ -130,13 +130,21 @@ struct split_result {
 	const guint8 *val;
 };
 
-static GArray *split_payload(tvbuff_t *tvb, guint offset, guint msg_len, gchar split_char) {
+/**
+ * Split the payload using the specified character.
+ *
+ * @param tvb subset tvb containing the payload.
+ * @param split_char character on which to split.
+ *
+ * @return GArray of elements. Must be freed by the caller.
+ */
+static GArray *split_payload(tvbuff_t *tvb, gchar split_char) {
 	struct split_result elem;
 	GArray *ret = g_array_new(FALSE, FALSE, sizeof(elem));
+	gint offset = 0;
 	gint found_offset;
-	gint end_offset = offset + msg_len; // past last byte
 
-	found_offset = tvb_find_guint8(tvb, offset, msg_len, split_char);
+	found_offset = tvb_find_guint8(tvb, offset, -1, split_char);
 	while (found_offset != -1) {
 		const guint8 *val = tvb_get_ephemeral_string(tvb, offset, found_offset - offset);
 
@@ -147,11 +155,11 @@ static GArray *split_payload(tvbuff_t *tvb, guint offset, guint msg_len, gchar s
 
 		// Skip the ;
 		offset = found_offset + 1;
-		found_offset = tvb_find_guint8(tvb, offset, msg_len, split_char);
+		found_offset = tvb_find_guint8(tvb, offset, -1, split_char);
 	}
 
-	if (end_offset - offset) {
-		elem.val = tvb_get_ephemeral_string(tvb, offset, end_offset - offset);
+	if (tvb_length(tvb) - offset) {
+		elem.val = tvb_get_ephemeral_string(tvb, offset, tvb_length(tvb) - offset);
 		elem.offset_start = offset;
 
 		g_array_append_val(ret, elem);
@@ -200,7 +208,8 @@ static void dissect_ok_error_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 static void dissect_list_of_signals(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, guint msg_len,
 		struct gdbrsp_conv_data *conv) {
 	gint i;
-	GArray *elements = split_payload(tvb, offset, msg_len, ';');
+	tvbuff_t* payload_tvb = tvb_new_subset_length(tvb, offset, msg_len);
+	GArray *elements = split_payload(payload_tvb, ';');
 	proto_tree *ti;
 
 	if (elements->len > 0) {
@@ -213,7 +222,7 @@ static void dissect_list_of_signals(tvbuff_t *tvb, packet_info *pinfo, proto_tre
 			const char *signal_name = gdb_signal_names[signal_number];
 			const char *signal_desc = gdb_signal_descriptions[signal_number];
 
-			proto_tree_add_uint_format(tree, hf_program_signal, tvb, res.offset_start, strlen((char*) res.val),
+			proto_tree_add_uint_format(tree, hf_program_signal, payload_tvb, res.offset_start, strlen((char*) res.val),
 					signal_number, "%lu - %s - %s", signal_number, signal_name, signal_desc);
 		}
 	}
@@ -319,12 +328,13 @@ static void dissect_qSupported(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 	}
 
 	gint i;
-	GArray *elements = split_payload(tvb, offset, msg_len, ';');
+	tvbuff_t* payload_tvb = tvb_new_subset_length(tvb, offset, msg_len);
+	GArray *elements = split_payload(payload_tvb, ';');
 
 	for (i = 0; i < elements->len; i++) {
 		struct split_result res = g_array_index(elements, struct split_result, i);
 
-		proto_tree_add_string_format(tree, hf_qsupported, tvb, res.offset_start, strlen((const char*) res.val),
+		proto_tree_add_string_format(tree, hf_qsupported, payload_tvb, res.offset_start, strlen((const char*) res.val),
 				(const char*) res.val, "%s", (const char*) res.val);
 	}
 

@@ -778,34 +778,31 @@ static struct gdbrsp_conv_data *get_conv_data(packet_info *pinfo) {
 
 	return conv_data;
 }
+
 /*
-static void dissect_crc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
+ * tvb contains the packet data. crc_tvb contains the crc.
+ */
+static void dissect_crc(tvbuff_t *tvb, tvbuff_t *crc_tvb, packet_info *pinfo, proto_tree *tree,
 		struct gdbrsp_conv_data *conv) {
 	int i;
 	char packet_crc[3];
-	char computed_crc[3];
 	unsigned int crc = 0;
 
 	if (tree) {
-		for (i = offset; i < (offset + msg_len - crc_len); i++) {
+		for (i = 0; i < tvb_length(tvb); i++) {
 			crc += tvb_get_guint8(tvb, i);
 		}
 
 		crc = crc % 256;
 
-		// Skip #
-		i++;
-
-		packet_crc[0] = tvb_get_guint8(tvb, i);
-		packet_crc[1] = tvb_get_guint8(tvb, i + 1);
+		packet_crc[0] = tvb_get_guint8(crc_tvb, 0);
+		packet_crc[1] = tvb_get_guint8(crc_tvb, 1);
 		packet_crc[2] = '\0';
 
-		snprintf(computed_crc, 3, "%02x", crc);
-
-		proto_tree_add_uint_format_value(tree, hf_checksum, tvb, i, 2, crc, "%s (computed crc: %s)", packet_crc,
-				computed_crc);
+		proto_tree_add_uint_format_value(tree, hf_checksum, crc_tvb, 0, 2, crc, "%s (computed crc: %02x)", packet_crc,
+				crc);
 	}
-}*/
+}
 
 // If the available data contains a complete message, return the length of that message. Otherwise, return 0.
 static gint find_next_message_len(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset) {
@@ -880,9 +877,9 @@ static enum gdb_msg_type determine_type(struct gdbrsp_conv_data *conv, guint8 fi
 
 static void dissect_one_gdbrsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree) {
 	proto_item *ti;
-	tvbuff_t *subset_tvb = NULL;
-	//tvbuff_t *crc_tvb = NULL;
-	guint msg_len;
+	tvbuff_t *payload_tvb = NULL;
+	tvbuff_t *crc_tvb = NULL;
+	guint msg_len, crc_offset;
 
 	if (check_col(pinfo->cinfo, COL_PROTOCOL)) {
 		col_set_str(pinfo->cinfo, COL_PROTOCOL, "GDB-RSP");
@@ -915,33 +912,34 @@ static void dissect_one_gdbrsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 	// Dissect based on what we expect to have
 	switch (packet_data->type) {
 	case GDB_HOST_QUERY:
-		// Skip $
-		msg_len = tvb_length(tvb) - 1 - crc_len;
-		subset_tvb = tvb_new_subset_length(tvb, 1, msg_len);
-		dissect_one_host_query(subset_tvb, pinfo, tree, conv);
+		msg_len = tvb_length(tvb) - 1 /* $ */ - crc_len;
+		payload_tvb = tvb_new_subset_length(tvb, 1, msg_len);
+		dissect_one_host_query(payload_tvb, pinfo, tree, conv);
 
-		// Skip $ and #
-		//crc_tvb = tvb_new_subset_remaining(tvb, msg_len + 1 /* $ */ + 1 /* # */);
-		//dissect_crc(crc_tvb, pinfo, tree, conv);
+		crc_tvb = tvb_new_subset_remaining(tvb, tvb_length(tvb) - crc_len + 1 /* # */);
+		dissect_crc(payload_tvb, crc_tvb, pinfo, tree, conv);
 		break;
 	case GDB_HOST_ACK:
 		dissect_one_host_ack(tvb, pinfo, tree, conv);
 		break;
 	case GDB_STUB_REPLY:
-		msg_len = tvb_length(tvb) - 1 - crc_len;
-		subset_tvb = tvb_new_subset_length(tvb, 1, msg_len);
-		dissect_one_stub_reply(subset_tvb, pinfo, tree, conv);
-		//dissect_crc(tvb, pinfo, tree, offset + 1, msg_len - 1, conv);
+		msg_len = tvb_length(tvb) - 1 /* $ */ - crc_len;
+		payload_tvb = tvb_new_subset_length(tvb, 1, msg_len);
+		dissect_one_stub_reply(payload_tvb, pinfo, tree, conv);
+
+		crc_tvb = tvb_new_subset_remaining(tvb, tvb_length(tvb) - crc_len + 1 /* # */);
+		dissect_crc(payload_tvb, crc_tvb, pinfo, tree, conv);
 		break;
 	case GDB_STUB_ACK:
 		dissect_one_stub_ack(tvb, pinfo, tree, conv);
 		break;
 	case GDB_NOTIFICATION:
-		// Skip %
-		msg_len = tvb_length(tvb) - 1 - crc_len;
-		subset_tvb = tvb_new_subset_length(tvb, 1, msg_len);
+		msg_len = tvb_length(tvb) - 1 /* % */ - crc_len;
+		payload_tvb = tvb_new_subset_length(tvb, 1, msg_len);
 		dissect_one_notification(tvb, pinfo, tree, conv);
-		//dissect_crc(tvb, pinfo, tree, offset + 1, msg_len - 1, conv);
+
+		crc_tvb = tvb_new_subset_remaining(tvb, tvb_length(tvb) - crc_len + 1 /* # */);
+		dissect_crc(payload_tvb, crc_tvb, pinfo, tree, conv);
 		break;
 	}
 }

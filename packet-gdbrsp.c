@@ -879,7 +879,7 @@ static void dissect_one_gdbrsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 	proto_item *ti;
 	tvbuff_t *payload_tvb = NULL;
 	tvbuff_t *crc_tvb = NULL;
-	guint msg_len, crc_offset;
+	guint msg_len;
 
 	if (check_col(pinfo->cinfo, COL_PROTOCOL)) {
 		col_set_str(pinfo->cinfo, COL_PROTOCOL, "GDB-RSP");

@@ -128,6 +128,14 @@ struct split_result {
 	const guint8 *val;
 };
 
+struct thread_id_desc {
+	gint pid;
+	gint tid;
+
+	// Number of character used to represent the thread id
+	gint length;
+};
+
 /**
  * Split the payload using the specified character.
  *
@@ -162,6 +170,35 @@ static GArray *split_payload(tvbuff_t *tvb, gchar split_char) {
 
 		g_array_append_val(ret, elem);
 	}
+
+	return ret;
+}
+
+static struct thread_id_desc dissect_thread_id(tvbuff_t *tvb) {
+	struct thread_id_desc ret;
+	ret.pid = -1;
+	ret.tid = -1;
+
+	char* ptid_desc_start = (char *) tvb_get_ephemeral_string(tvb, 0, tvb_length(tvb));
+	char* num_start;
+	char* num_end;
+
+	if (ptid_desc_start[0] == 'p') {
+		num_start = ptid_desc_start + 1;
+
+		ret.pid = strtol(num_start, &num_end, 16);
+
+		if (*num_end == '.') {
+			num_start = num_end + 1;
+			ret.tid = strtol(num_start, &num_end, 16);
+		}
+
+	} else {
+		num_start = ptid_desc_start;
+		ret.tid = strtol(num_start, &num_end, 16);
+	}
+
+	ret.length = num_end - ptid_desc_start;
 
 	return ret;
 }
@@ -364,6 +401,13 @@ static void dissect_reply_QProgramSignals(tvbuff_t *tvb, packet_info *pinfo, pro
 }
 
 static void dissect_cmd_H(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, struct gdbrsp_conv_data *conv) {
+	guint8 affected_command = tvb_get_guint8(tvb, 0);
+
+	tvbuff_t *pid_tvb = tvb_new_subset_remaining(tvb, 1);
+
+	struct thread_id_desc ptid = dissect_thread_id(pid_tvb);
+
+	printf("ptid result = %d %d\n", ptid.pid, ptid.tid);
 }
 
 static void dissect_reply_H(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, struct gdbrsp_conv_data *conv) {

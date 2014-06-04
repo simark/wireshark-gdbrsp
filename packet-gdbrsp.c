@@ -46,6 +46,7 @@ static gint ett_gdbrsp = -1;
 /* Other subtrees */
 static gint ett_qsupported = -1;
 static gint ett_program_signals = -1;
+static gint ett_ptid = -1;
 
 /* Variables for fields */
 static int hf_command = -1;
@@ -55,6 +56,7 @@ static int hf_checksum = -1;
 static int hf_reply_to = -1;
 static int hf_address = -1;
 static int hf_length = -1;
+static int hf_offset = -1;
 static int hf_bytes = -1;
 static int hf_request_in = -1;
 static int hf_reply_in = -1;
@@ -65,6 +67,10 @@ static int hf_vcont_action = -1;
 static int hf_vcont_is_supported = -1;
 static int hf_program_signal = -1;
 static int hf_doc_link = -1;
+static int hf_ptid_pid = -1;
+static int hf_ptid_tid = -1;
+static int hf_filename = -1;
+static int hf_object = -1;
 
 // strlen("#XX");
 static const guint crc_len = 3;
@@ -125,7 +131,7 @@ const char *gdb_signal_descriptions[] = {
 
 struct split_result {
 	gint offset_start;
-	const guint8 *val;
+	const char *val;
 };
 
 struct thread_id_desc {
@@ -133,7 +139,8 @@ struct thread_id_desc {
 	gint tid;
 
 	// Number of character used to represent the thread id
-	gint length;
+	gint pid_offset, pid_length;
+	gint tid_offset, tid_length;
 };
 
 /**
@@ -152,10 +159,8 @@ static GArray *split_payload(tvbuff_t *tvb, gchar split_char) {
 
 	found_offset = tvb_find_guint8(tvb, offset, -1, split_char);
 	while (found_offset != -1) {
-		const guint8 *val = tvb_get_ephemeral_string(tvb, offset, found_offset - offset);
-
+		elem.val = (char *) tvb_get_ephemeral_string(tvb, offset, found_offset - offset);
 		elem.offset_start = offset;
-		elem.val = val;
 
 		g_array_append_val(ret, elem);
 
@@ -165,7 +170,7 @@ static GArray *split_payload(tvbuff_t *tvb, gchar split_char) {
 	}
 
 	if (tvb_length(tvb) - offset) {
-		elem.val = tvb_get_ephemeral_string(tvb, offset, tvb_length(tvb) - offset);
+		elem.val = (char *) tvb_get_ephemeral_string(tvb, offset, tvb_length(tvb) - offset);
 		elem.offset_start = offset;
 
 		g_array_append_val(ret, elem);
@@ -178,6 +183,10 @@ static struct thread_id_desc dissect_thread_id(tvbuff_t *tvb) {
 	struct thread_id_desc ret;
 	ret.pid = -1;
 	ret.tid = -1;
+	ret.pid_offset = -1;
+	ret.pid_length = -1;
+	ret.tid_offset = -1;
+	ret.tid_length = -1;
 
 	char* ptid_desc_start = (char *) tvb_get_ephemeral_string(tvb, 0, tvb_length(tvb));
 	char* num_start;
@@ -188,17 +197,24 @@ static struct thread_id_desc dissect_thread_id(tvbuff_t *tvb) {
 
 		ret.pid = strtol(num_start, &num_end, 16);
 
+		ret.pid_offset = num_start - ptid_desc_start;
+		ret.pid_length = num_end - num_start;
+
 		if (*num_end == '.') {
 			num_start = num_end + 1;
 			ret.tid = strtol(num_start, &num_end, 16);
+
+			ret.tid_offset = num_start - ptid_desc_start;
+			ret.tid_length = num_end - num_start;
 		}
 
 	} else {
 		num_start = ptid_desc_start;
 		ret.tid = strtol(num_start, &num_end, 16);
-	}
 
-	ret.length = num_end - ptid_desc_start;
+		ret.tid_offset = num_start - ptid_desc_start;
+		ret.tid_length = num_end - num_start;
+	}
 
 	return ret;
 }
@@ -402,12 +418,21 @@ static void dissect_reply_QProgramSignals(tvbuff_t *tvb, packet_info *pinfo, pro
 
 static void dissect_cmd_H(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, struct gdbrsp_conv_data *conv) {
 	guint8 affected_command = tvb_get_guint8(tvb, 0);
+	proto_tree *ti;
 
 	tvbuff_t *pid_tvb = tvb_new_subset_remaining(tvb, 1);
 
 	struct thread_id_desc ptid = dissect_thread_id(pid_tvb);
 
 	printf("ptid result = %d %d\n", ptid.pid, ptid.tid);
+
+	ti = proto_tree_add_text(tree, pid_tvb, 0, tvb_length(pid_tvb), "Thread ID");
+	tree = proto_item_add_subtree(ti, ett_ptid);
+
+	if (ptid.pid_offset >= 0) {
+		proto_tree_add_int(tree, hf_ptid_pid, pid_tvb, ptid.pid_offset, ptid.pid_length, ptid.pid);
+	}
+	proto_tree_add_int(tree, hf_ptid_tid, pid_tvb, ptid.tid_offset, ptid.tid_length, ptid.tid);
 }
 
 static void dissect_reply_H(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, struct gdbrsp_conv_data *conv) {
@@ -415,6 +440,40 @@ static void dissect_reply_H(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 }
 
 static void dissect_cmd_qXfer(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, struct gdbrsp_conv_data *conv) {
+	GArray *elements = split_payload(tvb, ':');
+
+	struct split_result object = g_array_index(elements, struct split_result, 1);
+	struct split_result read_or_write = g_array_index(elements, struct split_result, 2);
+	struct split_result annex = g_array_index(elements, struct split_result, 3);
+	struct split_result offset_length = g_array_index(elements, struct split_result, 4);
+
+	printf("%s|%s|%s|%s\n", object.val, read_or_write.val, annex.val, offset_length.val);
+
+	proto_tree_add_string(tree, hf_object, tvb, object.offset_start, strlen(object.val), object.val);
+
+	const char *offset_start = NULL, *length_start = NULL;
+	char *offset_end = NULL, *length_end = NULL;
+	unsigned long offset, length;
+
+	if (strcmp("read", (char *) read_or_write.val) == 0) {
+		offset_start = (char *) offset_length.val;
+		offset = strtoul(offset_start, &offset_end, 16);
+		length_start = offset_end + 1;
+		length = strtoul(length_start, &length_end, 16);
+
+		proto_tree_add_int(tree, hf_offset, tvb, offset_length.offset_start, offset_end - offset_start, offset);
+		proto_tree_add_int(tree, hf_length, tvb, offset_length.offset_start + offset_end - offset_start + 1, length_end - length_start, length);
+	} else if (strcmp("write", (char *) read_or_write.val) == 0) {
+		offset_start = (char *) offset_length.val;
+		offset = strtoul(offset_start, &offset_end, 16);
+		proto_tree_add_int(tree, hf_offset, tvb, offset_length.offset_start, offset_end - offset_start, offset);
+	} else {
+		// Bad
+	}
+
+	if (strcmp("features", (char *) object.val) == 0) {
+		proto_tree_add_string(tree, hf_filename, tvb, annex.offset_start, strlen((char *)annex.val), (char *)annex.val);
+	}
 }
 
 static void dissect_reply_qXfer(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, struct gdbrsp_conv_data *conv) {
@@ -1073,6 +1132,19 @@ static hf_register_info hf_gdbrsp[] =
 		}
 	},
 	{
+		&hf_offset,
+		{
+			"Offset", // name
+			"gdbrsp.offset", // abbrev
+			FT_INT32, // type
+			BASE_DEC, // display
+			0, // strings
+			0x0, // bitmask
+			NULL, // blurb
+			HFILL
+		}
+	},
+	{
 		&hf_bytes,
 		{
 			"Bytes", // name
@@ -1241,12 +1313,65 @@ static hf_register_info hf_gdbrsp[] =
 			HFILL
 		}
 	},
+	{
+		&hf_ptid_pid,
+		{
+			"PID", // name
+			"gdbrsp.pid", // abbrev
+			FT_INT32, // type
+			BASE_DEC,// display
+			0, // strings
+			0x0, // bitmask
+			NULL, // blurb
+			HFILL
+		}
+	},
+	{
+		&hf_ptid_tid,
+		{
+			"TID", // name
+			"gdbrsp.tid", // abbrev
+			FT_INT32, // type
+			BASE_DEC, // display
+			0, // strings
+			0x0, // bitmask
+			NULL, // blurb
+			HFILL
+		}
+	},
+	{
+		&hf_filename,
+		{
+			"Filename", // name
+			"gdbrsp.filename", // abbrev
+			FT_STRING, // type
+			BASE_NONE, // display
+			0, // strings
+			0x0, // bitmask
+			NULL, // blurb
+			HFILL
+		}
+	},
+	{
+		&hf_object,
+		{
+			"Object", // name
+			"gdbrsp.object", // abbrev
+			FT_STRING, // type
+			BASE_NONE, // display
+			0, // strings
+			0x0, // bitmask
+			NULL, // blurb
+			HFILL
+		}
+	},
+
 };
 
 void proto_register_gdbrsp(void) {
 
 	static gint *ett_gdbrsp_arr[] =
-	{ &ett_gdbrsp, &ett_qsupported, &ett_program_signals };
+	{ &ett_gdbrsp, &ett_qsupported, &ett_program_signals, &ett_ptid };
 
 	proto_gdbrsp = proto_register_protocol("GDB Remote Serial Protocol", "GDB RSP", "gdbrsp");
 	proto_register_field_array(proto_gdbrsp, hf_gdbrsp, array_length (hf_gdbrsp));

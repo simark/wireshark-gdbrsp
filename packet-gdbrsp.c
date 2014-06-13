@@ -358,6 +358,12 @@ static void dissect_cmd_vRun(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
 static void dissect_reply_vRun(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, struct gdbrsp_conv_data *conv) {
 }
 
+static void dissect_cmd_vFile(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, struct gdbrsp_conv_data *conv) {
+}
+
+static void dissect_reply_vFile(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, struct gdbrsp_conv_data *conv) {
+}
+
 static void dissect_cmd_vStopped(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, struct gdbrsp_conv_data *conv) {
 }
 
@@ -619,6 +625,12 @@ static void dissect_cmd_Z(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, s
 static void dissect_reply_Z(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, struct gdbrsp_conv_data *conv) {
 }
 
+static void dissect_cmd_z(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, struct gdbrsp_conv_data *conv) {
+}
+
+static void dissect_reply_z(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, struct gdbrsp_conv_data *conv) {
+}
+
 static void dissect_cmd_g(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, struct gdbrsp_conv_data *conv) {
 }
 
@@ -686,6 +698,7 @@ static struct dissect_command_t cmd_cbs[] = {
 	{ "vCont", dissect_cmd_vCont, dissect_reply_vCont, "https://sourceware.org/gdb/onlinedocs/gdb/Packets.html#vCont-packet" },
 	{ "vKill", dissect_cmd_vKill, dissect_reply_vKill, "https://sourceware.org/gdb/onlinedocs/gdb/Packets.html#index-vKill-packet" },
 	{ "vRun", dissect_cmd_vRun, dissect_reply_vRun, "https://sourceware.org/gdb/onlinedocs/gdb/Packets.html#index-vRun-packet" },
+	{ "vFile", dissect_cmd_vFile, dissect_reply_vFile, "https://sourceware.org/gdb/onlinedocs/gdb/Packets.html#index-vFile-packet" },
 	{ "vStopped", dissect_cmd_vStopped, dissect_reply_vStopped, "https://sourceware.org/gdb/onlinedocs/gdb/Notification-Packets.html#Notification-Packets" },
 	{ "qSupported", dissect_cmd_qSupported, dissect_reply_qSupported, "https://sourceware.org/gdb/onlinedocs/gdb/General-Query-Packets.html#qSupported" },
 	{ "QStartNoAckMode", dissect_cmd_QStartNoAckMode, dissect_reply_QStartNoAckMode, "https://sourceware.org/gdb/onlinedocs/gdb/General-Query-Packets.html#QStartNoAckMode" },
@@ -705,6 +718,7 @@ static struct dissect_command_t cmd_cbs[] = {
 	{ "qSymbol", dissect_cmd_qSymbol, dissect_reply_qSymbol, "https://sourceware.org/gdb/onlinedocs/gdb/General-Query-Packets.html#index-qSymbol-packet" },
 	{ "m", dissect_cmd_m, dissect_reply_m, "https://sourceware.org/gdb/onlinedocs/gdb/Packets.html#index-m-packet" },
 	{ "Z", dissect_cmd_Z, dissect_reply_Z, "https://sourceware.org/gdb/onlinedocs/gdb/Packets.html#index-z-packet" },
+	{ "z", dissect_cmd_z, dissect_reply_z, "https://sourceware.org/gdb/onlinedocs/gdb/Packets.html#index-z-packet" },
 	{ "g", dissect_cmd_g, dissect_reply_g, "https://sourceware.org/gdb/onlinedocs/gdb/Packets.html#index-g-packet" },
 	{ "G", dissect_cmd_G, dissect_reply_G, "https://sourceware.org/gdb/onlinedocs/gdb/Packets.html#index-G-packet" },
 	{ "P", dissect_cmd_P, dissect_reply_P, "https://sourceware.org/gdb/onlinedocs/gdb/Packets.html#index-P-packet" },

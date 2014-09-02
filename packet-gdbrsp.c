@@ -32,6 +32,8 @@
 #include <config.h>
 #include <epan/packet.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <assert.h>
 #include <ctype.h>
 #include <epan/dissectors/packet-tcp.h>
 
@@ -159,7 +161,7 @@ static GArray *split_payload(tvbuff_t *tvb, gchar split_char) {
 
 	found_offset = tvb_find_guint8(tvb, offset, -1, split_char);
 	while (found_offset != -1) {
-		elem.val = (char *) tvb_get_ephemeral_string(tvb, offset, found_offset - offset);
+		elem.val = (char *) tvb_get_string_enc(wmem_packet_scope(), tvb, offset, found_offset - offset, ENC_ASCII);
 		elem.offset_start = offset;
 
 		g_array_append_val(ret, elem);
@@ -170,7 +172,7 @@ static GArray *split_payload(tvbuff_t *tvb, gchar split_char) {
 	}
 
 	if (tvb_length(tvb) - offset) {
-		elem.val = (char *) tvb_get_ephemeral_string(tvb, offset, tvb_length(tvb) - offset);
+		elem.val = (char *) tvb_get_string_enc(wmem_packet_scope(), tvb, offset, tvb_length(tvb) - offset, ENC_ASCII);
 		elem.offset_start = offset;
 
 		g_array_append_val(ret, elem);
@@ -188,7 +190,7 @@ static struct thread_id_desc dissect_thread_id(tvbuff_t *tvb) {
 	ret.tid_offset = -1;
 	ret.tid_length = -1;
 
-	char* ptid_desc_start = (char *) tvb_get_ephemeral_string(tvb, 0, tvb_length(tvb));
+	char* ptid_desc_start = (char *) tvb_get_string_enc(wmem_packet_scope(), tvb, 0, tvb_length(tvb), ENC_ASCII);
 	char* num_start;
 	char* num_end;
 
@@ -423,7 +425,7 @@ static void dissect_reply_QProgramSignals(tvbuff_t *tvb, packet_info *pinfo, pro
 }
 
 static void dissect_cmd_H(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, struct gdbrsp_conv_data *conv) {
-	guint8 affected_command = tvb_get_guint8(tvb, 0);
+	/*guint8 affected_command = */tvb_get_guint8(tvb, 0);
 	proto_tree *ti;
 
 	tvbuff_t *pid_tvb = tvb_new_subset_remaining(tvb, 1);
@@ -559,7 +561,7 @@ static void dissect_reply_qSymbol(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
 }
 
 static void dissect_cmd_m(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, struct gdbrsp_conv_data *conv) {
-	struct per_packet_data *pdata = p_get_proto_data(pinfo->fd, proto_gdbrsp, 0);
+	struct per_packet_data *pdata = (struct per_packet_data *) p_get_proto_data(wmem_file_scope(), pinfo, proto_gdbrsp, 0);
 	guint8 digit = 0;
 
 	guint start_offset = 0;
@@ -576,7 +578,7 @@ static void dissect_cmd_m(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, s
 		digit = tvb_get_guint8(tvb, offset);
 	}
 
-	gchar *address = (gchar*) tvb_get_ephemeral_string(tvb, start_offset, offset - start_offset);
+	gchar *address = (gchar*) tvb_get_string_enc(wmem_packet_scope(), tvb, start_offset, offset - start_offset, ENC_ASCII);
 	proto_tree_add_string_format_value(tree, hf_address, tvb, start_offset, offset - start_offset, address, "0x%s",
 			address);
 
@@ -595,7 +597,7 @@ static void dissect_cmd_m(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, s
 		offset++;
 	}
 
-	gchar *len = (gchar*) tvb_get_ephemeral_string(tvb, start_offset, offset - start_offset);
+	gchar *len = (gchar*) tvb_get_string_enc(wmem_packet_scope(), tvb, start_offset, offset - start_offset, ENC_ASCII);
 	long lenn = strtol(len, NULL, 16);
 	proto_tree_add_int_format_value(tree, hf_length, tvb, start_offset, offset - start_offset, lenn, "%ld bytes", lenn);
 
@@ -748,7 +750,7 @@ static void dissect_one_host_query(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 	int command_name_len = 0;
 	printf("Host query\n");
 
-	struct per_packet_data *packet_data = p_get_proto_data(pinfo->fd, proto_gdbrsp, 0);
+	struct per_packet_data *packet_data = (struct per_packet_data *) p_get_proto_data(wmem_file_scope(), pinfo, proto_gdbrsp, 0);
 
 	if (!pinfo->fd->flags.visited) {
 		packet_data->command = find_command(tvb);
@@ -798,7 +800,7 @@ static void dissect_one_stub_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 	printf("Stub reply\n");
 	col_append_str(pinfo->cinfo, COL_INFO, "Stub reply");
 
-	struct per_packet_data *packet_data = p_get_proto_data(pinfo->fd, proto_gdbrsp, 0);
+	struct per_packet_data *packet_data = (struct per_packet_data *) p_get_proto_data(wmem_file_scope(), pinfo, proto_gdbrsp, 0);
 
 	if (!pinfo->fd->flags.visited) {
 		packet_data->command = conv->last_command;
@@ -834,7 +836,7 @@ static void dissect_one_ack(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 		struct gdbrsp_conv_data *conv) {
 	printf("Stub ack %d\n", tvb_length(tvb));
 
-	struct per_packet_data *packet_data = p_get_proto_data(pinfo->fd, proto_gdbrsp, 0);
+	struct per_packet_data *packet_data = (struct per_packet_data *) p_get_proto_data(wmem_file_scope(), pinfo, proto_gdbrsp, 0);
 
 	if (!pinfo->fd->flags.visited) {
 		packet_data->command = conv->last_command;
@@ -1000,9 +1002,8 @@ static void dissect_one_gdbrsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 	tvbuff_t *crc_tvb = NULL;
 	guint msg_len;
 
-	if (check_col(pinfo->cinfo, COL_PROTOCOL)) {
-		col_set_str(pinfo->cinfo, COL_PROTOCOL, "GDB-RSP");
-	}
+	col_set_str(pinfo->cinfo, COL_PROTOCOL, "GDB-RSP");
+
 
 	col_clear(pinfo->cinfo, COL_INFO);
 
@@ -1015,7 +1016,7 @@ static void dissect_one_gdbrsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 	}
 
 	// Check if we already determined
-	struct per_packet_data *packet_data = p_get_proto_data(pinfo->fd, proto_gdbrsp, 0);
+	struct per_packet_data *packet_data = (struct per_packet_data *) p_get_proto_data(wmem_file_scope(), pinfo, proto_gdbrsp, 0);
 	if (!packet_data) {
 		packet_data = g_malloc0(sizeof(struct per_packet_data));
 		// TODO: add check and exception
@@ -1025,7 +1026,7 @@ static void dissect_one_gdbrsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 
 		packet_data->type = determine_type(conv, first_char);
 
-		p_add_proto_data(pinfo->fd, proto_gdbrsp, 0, packet_data);
+		p_add_proto_data(wmem_file_scope(), pinfo, proto_gdbrsp, 0, packet_data);
 	}
 
 	// Dissect based on what we expect to have

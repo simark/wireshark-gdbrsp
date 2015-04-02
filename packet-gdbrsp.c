@@ -654,6 +654,67 @@ static void dissect_reply_P(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 }
 
 static void dissect_cmd_X(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, struct gdbrsp_conv_data *conv) {
+	struct per_packet_data *pdata = (struct per_packet_data *) p_get_proto_data(pinfo->fd, proto_gdbrsp, 0);
+	guint8 digit = 0;
+
+	guint start_offset = 0;
+	guint offset = 0;
+
+	digit = tvb_get_guint8(tvb, offset);
+	while (digit != ',') {
+		if (!isxdigit(digit)) {
+			// Whaaaaat
+			return;
+		}
+
+		offset++;
+		digit = tvb_get_guint8(tvb, offset);
+	}
+
+	gchar *address = (gchar*) tvb_get_string(tvb, start_offset, offset - start_offset);
+	proto_tree_add_string_format_value(tree, hf_address, tvb, start_offset, offset - start_offset, address, "0x%s",
+			address);
+
+	// Skip ,
+	offset++;
+
+	start_offset = offset;
+
+	digit = tvb_get_guint8(tvb, offset);
+	while (digit != ':') {
+		if (!isxdigit(digit)) {
+			// Whaaaaat
+			return;
+		}
+
+		offset++;
+		digit = tvb_get_guint8(tvb, offset);
+	}
+
+	gchar *len = (gchar*) tvb_get_string(tvb, start_offset, offset - start_offset);
+	long lenn = strtol(len, NULL, 16);
+	long lenn_escaped = lenn;
+	proto_tree_add_int_format_value(tree, hf_length, tvb, start_offset, offset - start_offset, lenn, "%ld bytes", lenn);
+
+	// Skip :
+	offset++;
+
+	start_offset = offset;
+
+	GArray *bytes = g_array_sized_new(FALSE, FALSE, sizeof(guint8), lenn);
+
+	guint8 b;
+	guint i;
+
+	for (i = start_offset; i < (start_offset + lenn); i++) {
+		b = tvb_get_guint8(tvb, i);
+		g_array_append_val(bytes, b);
+		if (b == '}')
+			lenn_escaped++;
+	}
+
+	proto_tree_add_bytes(tree, hf_bytes, tvb, start_offset, lenn_escaped, (guint8*) bytes->data);
+	g_array_free(bytes, TRUE);
 }
 
 static void dissect_reply_X(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, struct gdbrsp_conv_data *conv) {

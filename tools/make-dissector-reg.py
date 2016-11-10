@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 #
 # Looks for registration routines in the protocol dissectors,
 # and assembles C code to call all the routines.

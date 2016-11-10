@@ -31,6 +31,7 @@
 
 #include <config.h>
 #include <epan/packet.h>
+#include <epan/proto_data.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -73,6 +74,10 @@ static int hf_ptid_pid = -1;
 static int hf_ptid_tid = -1;
 static int hf_filename = -1;
 static int hf_object = -1;
+static int hf_signals = -1;
+static int hf_vcont_supported = -1;
+static int hf_qsupported_reply = -1;
+static int hf_ptid = -1;
 
 // strlen("#XX");
 static const guint crc_len = 3;
@@ -171,8 +176,8 @@ static GArray *split_payload(tvbuff_t *tvb, gchar split_char) {
 		found_offset = tvb_find_guint8(tvb, offset, -1, split_char);
 	}
 
-	if (tvb_length(tvb) - offset) {
-		elem.val = (char *) tvb_get_string_enc(wmem_packet_scope(), tvb, offset, tvb_length(tvb) - offset, ENC_ASCII);
+	if (tvb_captured_length(tvb) - offset) {
+		elem.val = (char *) tvb_get_string_enc(wmem_packet_scope(), tvb, offset, tvb_captured_length(tvb) - offset, ENC_ASCII);
 		elem.offset_start = offset;
 
 		g_array_append_val(ret, elem);
@@ -190,7 +195,7 @@ static struct thread_id_desc dissect_thread_id(tvbuff_t *tvb) {
 	ret.tid_offset = -1;
 	ret.tid_length = -1;
 
-	char* ptid_desc_start = (char *) tvb_get_string_enc(wmem_packet_scope(), tvb, 0, tvb_length(tvb), ENC_ASCII);
+	char* ptid_desc_start = (char *) tvb_get_string_enc(wmem_packet_scope(), tvb, 0, tvb_captured_length(tvb), ENC_ASCII);
 	char* num_start;
 	char* num_end;
 
@@ -241,7 +246,7 @@ static const char *vcont_command_description(char c) {
 }
 
 static void dissect_ok_error_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, struct gdbrsp_conv_data *conv) {
-	if (tvb_length(tvb) == 0) {
+	if (tvb_captured_length(tvb) == 0) {
 		proto_tree_add_string(tree, hf_reply_ok_error, tvb, 0, 0, "Target does not support this command");
 		return;
 	}
@@ -269,7 +274,7 @@ static void dissect_list_of_signals(tvbuff_t *tvb, packet_info *pinfo, proto_tre
 	proto_tree *ti;
 
 	if (elements->len > 0) {
-		ti = proto_tree_add_text(tree, tvb, 0, -1, "Signals to pass to the program");
+		ti = proto_tree_add_item (tree, hf_signals, tvb, 0, tvb_captured_length(tvb), ENC_NA);
 		tree = proto_item_add_subtree(ti, ett_program_signals);
 
 		for (i = 0; i < elements->len; i++) {
@@ -308,7 +313,7 @@ static void dissect_reply_vCont_supported(tvbuff_t *tvb, packet_info *pinfo, pro
 		// Skip vCont
 		tvbuff_t *subbuf = tvb_new_subset_remaining(tvb, vcont_strlen);
 
-		ti = proto_tree_add_text(tree, subbuf, 0, tvb_length(subbuf), "Supported commands");
+		ti = proto_tree_add_item (tree, hf_vcont_supported, tvb, 0, tvb_captured_length(subbuf), ENC_NA);
 		tree = proto_item_add_subtree(ti, ett_qsupported);
 
 		GArray *elements = split_payload(subbuf, ';');
@@ -319,10 +324,8 @@ static void dissect_reply_vCont_supported(tvbuff_t *tvb, packet_info *pinfo, pro
 			feature = (const gchar *) res.val;
 			feature_description = vcont_command_description(feature[0]);
 
-			if (tree) {
-				proto_tree_add_string_format(tree, hf_qsupported, subbuf, res.offset_start, 1, feature, "%s (%s)",
-						feature, feature_description);
-			}
+			proto_tree_add_string_format(tree, hf_qsupported, subbuf, res.offset_start, 1, feature, "%s (%s)",
+					feature, feature_description);
 		}
 
 		g_array_free(elements, TRUE);
@@ -354,6 +357,12 @@ static void dissect_cmd_vKill(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
 static void dissect_reply_vKill(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, struct gdbrsp_conv_data *conv) {
 }
 
+static void dissect_cmd_vMustReplyEmpty(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, struct gdbrsp_conv_data *conv) {
+}
+
+static void dissect_reply_vMustReplyEmpty(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, struct gdbrsp_conv_data *conv) {
+}
+
 static void dissect_cmd_vRun(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, struct gdbrsp_conv_data *conv) {
 }
 
@@ -375,10 +384,8 @@ static void dissect_reply_vStopped(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 static void dissect_qSupported(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, struct gdbrsp_conv_data *conv) {
 	proto_item *ti;
 
-	if (tree) {
-		ti = proto_tree_add_text(tree, tvb, 0, tvb_length(tvb), "Supported features");
-		tree = proto_item_add_subtree(ti, ett_qsupported);
-	}
+	ti = proto_tree_add_item (tree, hf_qsupported, tvb, 0, tvb_captured_length(tvb), ENC_NA);
+	tree = proto_item_add_subtree(ti, ett_qsupported);
 
 	gint i;
 
@@ -387,7 +394,7 @@ static void dissect_qSupported(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 	for (i = 0; i < elements->len; i++) {
 		struct split_result res = g_array_index(elements, struct split_result, i);
 
-		proto_tree_add_string_format(tree, hf_qsupported, tvb, res.offset_start, strlen((const char*) res.val),
+		proto_tree_add_string_format(tree, hf_qsupported, tvb, res.offset_start, strlen(res.val),
 				(const char*) res.val, "%s", (const char*) res.val);
 	}
 
@@ -434,7 +441,7 @@ static void dissect_cmd_H(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, s
 
 	printf("ptid result = %d %d\n", ptid.pid, ptid.tid);
 
-	ti = proto_tree_add_text(tree, pid_tvb, 0, tvb_length(pid_tvb), "Thread ID");
+	ti = proto_tree_add_item (tree, hf_ptid, pid_tvb, 0, tvb_captured_length(pid_tvb), ENC_NA);
 	tree = proto_item_add_subtree(ti, ett_ptid);
 
 	if (ptid.pid_offset >= 0) {
@@ -606,7 +613,7 @@ static void dissect_cmd_m(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, s
 
 static void dissect_reply_m(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, struct gdbrsp_conv_data *conv) {
 	//int expected_len = conv->last_request_data->u.m.requested_len;
-	guint len = tvb_length(tvb);
+	guint len = tvb_captured_length(tvb);
 	GArray *bytes = g_array_sized_new(FALSE, FALSE, sizeof(guint8), len);
 
 	guint8 b;
@@ -699,6 +706,7 @@ static struct dissect_command_t cmd_cbs[] = {
 	{ "vCont?", dissect_cmd_vCont_supported, dissect_reply_vCont_supported, "https://sourceware.org/gdb/onlinedocs/gdb/Packets.html#index-vCont_003f-packet" },
 	{ "vCont", dissect_cmd_vCont, dissect_reply_vCont, "https://sourceware.org/gdb/onlinedocs/gdb/Packets.html#vCont-packet" },
 	{ "vKill", dissect_cmd_vKill, dissect_reply_vKill, "https://sourceware.org/gdb/onlinedocs/gdb/Packets.html#index-vKill-packet" },
+	{ "vMustReplyEmpty", dissect_cmd_vMustReplyEmpty, dissect_reply_vMustReplyEmpty, NULL },
 	{ "vRun", dissect_cmd_vRun, dissect_reply_vRun, "https://sourceware.org/gdb/onlinedocs/gdb/Packets.html#index-vRun-packet" },
 	{ "vFile", dissect_cmd_vFile, dissect_reply_vFile, "https://sourceware.org/gdb/onlinedocs/gdb/Packets.html#index-vFile-packet" },
 	{ "vStopped", dissect_cmd_vStopped, dissect_reply_vStopped, "https://sourceware.org/gdb/onlinedocs/gdb/Notification-Packets.html#Notification-Packets" },
@@ -750,7 +758,8 @@ static void dissect_one_host_query(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 	int command_name_len = 0;
 	printf("Host query\n");
 
-	struct per_packet_data *packet_data = (struct per_packet_data *) p_get_proto_data(wmem_file_scope(), pinfo, proto_gdbrsp, 0);
+	struct per_packet_data *packet_data =
+	  (struct per_packet_data *) p_get_proto_data(wmem_file_scope(), pinfo, proto_gdbrsp, 0);
 
 	if (!pinfo->fd->flags.visited) {
 		packet_data->command = find_command(tvb);
@@ -771,9 +780,7 @@ static void dissect_one_host_query(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 	command_name_len = strlen(cmd->command);
 
 	/* Add command name entry to tree */
-	if (tree) {
-		proto_tree_add_string(tree, hf_command, tvb, 0, command_name_len, cmd->command);
-	}
+	proto_tree_add_string(tree, hf_command, tvb, 0, command_name_len, cmd->command);
 
 	/* Set info column */
 	col_append_str(pinfo->cinfo, COL_INFO, cmd->command);
@@ -784,14 +791,13 @@ static void dissect_one_host_query(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 	tvbuff_t *subset_tvbuff = tvb_new_subset_remaining(tvb, command_name_len);
 	cmd->command_handler(subset_tvbuff, pinfo, tree, conv);
 
-	if (tree) {
-		if (packet_data->matching_framenum > 0) {
-			proto_tree_add_uint(tree, hf_reply_in, tvb, 0, 0, packet_data->matching_framenum);
-		}
-		if (cmd->doc_url) {
-			proto_item *pi = proto_tree_add_string(tree, hf_doc_link, tvb, 0, 0, cmd->doc_url);
-			PROTO_ITEM_SET_URL(pi);
-		}
+	if (packet_data->matching_framenum > 0) {
+		proto_tree_add_uint(tree, hf_reply_in, tvb, 0, 0, packet_data->matching_framenum);
+	}
+
+	if (cmd->doc_url) {
+		proto_item *pi = proto_tree_add_string(tree, hf_doc_link, tvb, 0, 0, cmd->doc_url);
+		PROTO_ITEM_SET_URL(pi);
 	}
 }
 static void dissect_one_stub_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
@@ -818,23 +824,19 @@ static void dissect_one_stub_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 		return;
 	}
 
-	if (tree) {
-		proto_tree_add_string(tree, hf_reply_to, tvb, 0, 0, cmd->command);
-	}
+	proto_tree_add_string(tree, hf_reply_to, tvb, 0, 0, cmd->command);
 
 	col_append_str(pinfo->cinfo, COL_INFO, " to ");
 	col_append_str(pinfo->cinfo, COL_INFO, cmd->command);
 
 	cmd->reply_handler(tvb, pinfo, tree, conv);
 
-	if (tree) {
-		proto_tree_add_uint(tree, hf_request_in, tvb, 0, 0, packet_data->matching_framenum);
-	}
+	proto_tree_add_uint(tree, hf_request_in, tvb, 0, 0, packet_data->matching_framenum);
 }
 
 static void dissect_one_ack(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 		struct gdbrsp_conv_data *conv) {
-	printf("Stub ack %d\n", tvb_length(tvb));
+	printf("Stub ack %d\n", tvb_captured_length(tvb));
 
 	struct per_packet_data *packet_data = (struct per_packet_data *) p_get_proto_data(wmem_file_scope(), pinfo, proto_gdbrsp, 0);
 
@@ -844,21 +846,19 @@ static void dissect_one_ack(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 	}
 
 	guint8 c = tvb_get_guint8(tvb, 0);
-	if (tvb_length(tvb) == 1 && (c == '+' || c == '-')) {
-		if (tree) {
-			// Add protocol section in the packet details
-			proto_tree_add_boolean(tree, hf_ack, tvb, 0, 1, c == '+' ? TRUE : FALSE);
+	if (tvb_captured_length(tvb) == 1 && (c == '+' || c == '-')) {
+		// Add protocol section in the packet details
+		proto_tree_add_boolean(tree, hf_ack, tvb, 0, 1, c == '+' ? TRUE : FALSE);
 
-			if (packet_data->matching_framenum > 0) {
-				proto_tree_add_uint(tree, hf_ack_to, tvb, 0, 0, packet_data->matching_framenum);
-			}
+		if (packet_data->matching_framenum > 0) {
+			proto_tree_add_uint(tree, hf_ack_to, tvb, 0, 0, packet_data->matching_framenum);
 		}
 	}
 }
 
 static void dissect_one_host_ack(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 		struct gdbrsp_conv_data *conv) {
-	printf("Host ack %d\n", tvb_length(tvb));
+	printf("Host ack %d\n", tvb_captured_length(tvb));
 
 	if (!pinfo->fd->flags.visited) {
 		if (conv->disable_ack_at_next_host_ack) {
@@ -891,7 +891,7 @@ static struct gdbrsp_conv_data *get_conv_data(packet_info *pinfo) {
 	if (!conv_data) {
 		// New conversation heh ?
 		printf("Convo not found, creating new\n");
-		conv_data = se_alloc0(sizeof(struct gdbrsp_conv_data));
+		conv_data = wmem_alloc0(wmem_file_scope(), sizeof(struct gdbrsp_conv_data));
 		conv_data->next_expected_msg = GDB_HOST_ACK;
 		conv_data->ack_enabled = 1;
 		conversation_add_proto_data(conv, proto_gdbrsp, conv_data);
@@ -909,20 +909,18 @@ static void dissect_crc(tvbuff_t *tvb, tvbuff_t *crc_tvb, packet_info *pinfo, pr
 	char packet_crc[3];
 	unsigned int crc = 0;
 
-	if (tree) {
-		for (i = 0; i < tvb_length(tvb); i++) {
-			crc += tvb_get_guint8(tvb, i);
-		}
-
-		crc = crc % 256;
-
-		packet_crc[0] = tvb_get_guint8(crc_tvb, 0);
-		packet_crc[1] = tvb_get_guint8(crc_tvb, 1);
-		packet_crc[2] = '\0';
-
-		proto_tree_add_uint_format_value(tree, hf_checksum, crc_tvb, 0, 2, crc, "%s (computed crc: %02x)", packet_crc,
-				crc);
+	for (i = 0; i < tvb_captured_length(tvb); i++) {
+		crc += tvb_get_guint8(tvb, i);
 	}
+
+	crc = crc % 256;
+
+	packet_crc[0] = tvb_get_guint8(crc_tvb, 0);
+	packet_crc[1] = tvb_get_guint8(crc_tvb, 1);
+	packet_crc[2] = '\0';
+
+	proto_tree_add_uint_format_value(tree, hf_checksum, crc_tvb, 0, 2, crc, "%s (computed crc: %02x)", packet_crc,
+			crc);
 }
 
 // If the available data contains a complete message, return the length of that message. Otherwise, return 0.
@@ -1010,10 +1008,8 @@ static void dissect_one_gdbrsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 	struct gdbrsp_conv_data *conv = get_conv_data(pinfo);
 
 	// Add gdb subtree
-	if (tree) {
-		ti = proto_tree_add_item(tree, proto_gdbrsp, tvb, 0, tvb_length(tvb), ENC_NA);
-		tree = proto_item_add_subtree(ti, ett_gdbrsp);
-	}
+	ti = proto_tree_add_item(tree, proto_gdbrsp, tvb, 0, tvb_captured_length(tvb), ENC_NA);
+	tree = proto_item_add_subtree(ti, ett_gdbrsp);
 
 	// Check if we already determined
 	struct per_packet_data *packet_data = (struct per_packet_data *) p_get_proto_data(wmem_file_scope(), pinfo, proto_gdbrsp, 0);
@@ -1032,39 +1028,39 @@ static void dissect_one_gdbrsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 	// Dissect based on what we expect to have
 	switch (packet_data->type) {
 	case GDB_HOST_QUERY:
-		msg_len = tvb_length(tvb) - 1 /* $ */ - crc_len;
+		msg_len = tvb_captured_length(tvb) - 1 /* $ */ - crc_len;
 		payload_tvb = tvb_new_subset_length(tvb, 1, msg_len);
 		dissect_one_host_query(payload_tvb, pinfo, tree, conv);
 
-		crc_tvb = tvb_new_subset_remaining(tvb, tvb_length(tvb) - crc_len + 1 /* # */);
+		crc_tvb = tvb_new_subset_remaining(tvb, tvb_captured_length(tvb) - crc_len + 1 /* # */);
 		dissect_crc(payload_tvb, crc_tvb, pinfo, tree, conv);
 		break;
 	case GDB_HOST_ACK:
 		dissect_one_host_ack(tvb, pinfo, tree, conv);
 		break;
 	case GDB_STUB_REPLY:
-		msg_len = tvb_length(tvb) - 1 /* $ */ - crc_len;
+		msg_len = tvb_captured_length(tvb) - 1 /* $ */ - crc_len;
 		payload_tvb = tvb_new_subset_length(tvb, 1, msg_len);
 		dissect_one_stub_reply(payload_tvb, pinfo, tree, conv);
 
-		crc_tvb = tvb_new_subset_remaining(tvb, tvb_length(tvb) - crc_len + 1 /* # */);
+		crc_tvb = tvb_new_subset_remaining(tvb, tvb_captured_length(tvb) - crc_len + 1 /* # */);
 		dissect_crc(payload_tvb, crc_tvb, pinfo, tree, conv);
 		break;
 	case GDB_STUB_ACK:
 		dissect_one_stub_ack(tvb, pinfo, tree, conv);
 		break;
 	case GDB_NOTIFICATION:
-		msg_len = tvb_length(tvb) - 1 /* % */ - crc_len;
+		msg_len = tvb_captured_length(tvb) - 1 /* % */ - crc_len;
 		payload_tvb = tvb_new_subset_length(tvb, 1, msg_len);
 		dissect_one_notification(tvb, pinfo, tree, conv);
 
-		crc_tvb = tvb_new_subset_remaining(tvb, tvb_length(tvb) - crc_len + 1 /* # */);
+		crc_tvb = tvb_new_subset_remaining(tvb, tvb_captured_length(tvb) - crc_len + 1 /* # */);
 		dissect_crc(payload_tvb, crc_tvb, pinfo, tree, conv);
 		break;
 	}
 }
 
-static void dissect_gdbrsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree) {
+static int dissect_gdbrsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *v) {
 	guint offset = 0;
 	const guint max_offset = tvb_reported_length(tvb);
 	guint msg_len;
@@ -1087,9 +1083,11 @@ static void dissect_gdbrsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree) 
 		} else {
 			/* oops */
 			printf("oops\n");
-			return;
+			return 0;
 		}
 	}
+
+	return 0;
 }
 
 static hf_register_info hf_gdbrsp[] =
@@ -1380,7 +1378,58 @@ static hf_register_info hf_gdbrsp[] =
 			HFILL
 		}
 	},
-
+	{
+		&hf_signals,
+		{
+			"Signals to pass to the program",
+			"gdbrsp.signals",
+			FT_STRING,
+			BASE_NONE,
+			0,
+			0x0,
+			NULL,
+			HFILL
+		}
+	},
+	{
+		&hf_vcont_supported,
+		{
+			"Supported vCont commands",
+			"gdbrsp.vcont_supported",
+			FT_STRING,
+			BASE_NONE,
+			0,
+			0x0,
+			NULL,
+			HFILL
+		}
+	},
+	{
+		&hf_qsupported_reply,
+		{
+			"Supported features",
+			"gdbrsp.qsupported",
+			FT_STRING,
+			BASE_NONE,
+			0,
+			0x0,
+			NULL,
+			HFILL
+		}
+	},
+	{
+		&hf_ptid,
+		{
+			"PTID",
+			"gdbrsp.ptid",
+			FT_STRING,
+			BASE_NONE,
+			0,
+			0x0,
+			NULL,
+			HFILL
+		}
+	}
 };
 
 void proto_register_gdbrsp(void) {
@@ -1388,13 +1437,17 @@ void proto_register_gdbrsp(void) {
 	static gint *ett_gdbrsp_arr[] =
 	{ &ett_gdbrsp, &ett_qsupported, &ett_program_signals, &ett_ptid };
 
-	proto_gdbrsp = proto_register_protocol("GDB Remote Serial Protocol", "GDB RSP", "gdbrsp");
+	printf("Allo\n");
+
+	proto_gdbrsp = proto_register_protocol("GDB Remote Serial Protocol (plugin)", "GDB RSP", "gdbrsp");
 	proto_register_field_array(proto_gdbrsp, hf_gdbrsp, array_length (hf_gdbrsp));
 	proto_register_subtree_array(ett_gdbrsp_arr, array_length (ett_gdbrsp_arr));
 }
 
 void proto_reg_handoff_gdbrsp_gdbrsp(void) {
 	static dissector_handle_t gdbrsp_handle;
+
+	printf("Allo\n");
 
 	gdbrsp_handle = create_dissector_handle(dissect_gdbrsp, proto_gdbrsp);
 

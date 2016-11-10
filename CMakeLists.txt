@@ -26,7 +26,7 @@ project(gdbrsp-wireshark-plugin C)
 cmake_minimum_required(VERSION 2.6)
 set(CMAKE_BACKWARDS_COMPATIBILITY 2.6)
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
-set(CMAKE_INSTALL_LIBDIR ~/.wireshark)
+set(CMAKE_INSTALL_LIBDIR ~/.config/wireshark)
 
 INCLUDE(UseMakeDissectorReg)
 
@@ -35,13 +35,14 @@ set(GLIB2_MIN_VERSION 2.4.0)
 find_package(GLIB2)
 include_directories (${GLIB2_INCLUDE_DIRS})
 
-find_package(Wireshark)
+find_package(PkgConfig)
+pkg_check_modules(WIRESHARK REQUIRED wireshark)
 include_directories (${WIRESHARK_INCLUDE_DIRS})
 
 set(LINK_MODE_LIB SHARED)
 set(LINK_MODE_MODULE MODULE)
 
-SET( CMAKE_C_FLAGS   "-O0 -Wall -g3" )
+SET( CMAKE_C_FLAGS   "-O0 -Werror=implicit-function-declaration -Wall -g3" )
 
 set(DISSECTOR_SRC
 	packet-gdbrsp.c

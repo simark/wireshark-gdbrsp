@@ -661,7 +661,6 @@ static void dissect_reply_P(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 }
 
 static void dissect_cmd_X(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, struct gdbrsp_conv_data *conv) {
-	struct per_packet_data *pdata = (struct per_packet_data *) p_get_proto_data(pinfo->fd, proto_gdbrsp, 0);
 	guint8 digit = 0;
 
 	guint start_offset = 0;
@@ -678,7 +677,7 @@ static void dissect_cmd_X(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, s
 		digit = tvb_get_guint8(tvb, offset);
 	}
 
-	gchar *address = (gchar*) tvb_get_string(tvb, start_offset, offset - start_offset);
+	gchar *address = (gchar *) tvb_get_string_enc(wmem_packet_scope(), tvb, start_offset, offset - start_offset, ENC_ASCII);
 	proto_tree_add_string_format_value(tree, hf_address, tvb, start_offset, offset - start_offset, address, "0x%s",
 			address);
 
@@ -698,7 +697,7 @@ static void dissect_cmd_X(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, s
 		digit = tvb_get_guint8(tvb, offset);
 	}
 
-	gchar *len = (gchar*) tvb_get_string(tvb, start_offset, offset - start_offset);
+	gchar *len = (char *) tvb_get_string_enc(wmem_packet_scope(), tvb, start_offset, offset - start_offset, ENC_ASCII);
 	long lenn = strtol(len, NULL, 16);
 	long lenn_escaped = lenn;
 	proto_tree_add_int_format_value(tree, hf_length, tvb, start_offset, offset - start_offset, lenn, "%ld bytes", lenn);
